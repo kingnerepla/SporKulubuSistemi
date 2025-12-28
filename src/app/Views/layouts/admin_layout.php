@@ -3,80 +3,85 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spor CRM | Sistem Yönetimi</title>
+    <title>Spor CRM | Yönetim Paneli</title>
+    
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
     <style>
-        :root { --sidebar-bg: #0f172a; --sidebar-hover: #1e293b; --accent-color: #38bdf8; }
-        body { background-color: #f8fafc; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        #wrapper { display: flex; }
-        #sidebar-wrapper { min-width: 260px; max-width: 260px; background: var(--sidebar-bg); min-height: 100vh; position: fixed; }
-        #page-content-wrapper { width: 100%; margin-left: 260px; }
-        .nav-link { color: #94a3b8; padding: 12px 20px; border-radius: 8px; margin: 4px 15px; font-size: 0.9rem; transition: 0.3s; }
-        .nav-link:hover, .nav-link.active { background: var(--sidebar-hover); color: var(--accent-color); }
-        .menu-header { color: #475569; font-size: 0.7rem; font-weight: 800; padding: 25px 30px 10px; text-transform: uppercase; letter-spacing: 1px; }
-        .navbar { background: #ffffff; border-bottom: 1px solid #e2e8f0; }
+        body { background-color: #f4f7f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #wrapper { display: flex; width: 100%; align-items: stretch; }
+        #sidebar-wrapper { min-height: 100vh; width: 250px; background: #2c3e50; transition: all 0.3s; }
+        .sidebar-heading { padding: 20px; font-size: 1.2rem; color: #fff; border-bottom: 1px solid #34495e; font-weight: bold; }
+        .list-group-item { background: #2c3e50; color: #bdc3c7; border: none; padding: 15px 20px; }
+        .list-group-item:hover { background: #34495e; color: #fff; }
+        .list-group-item.active { background: #3498db; color: #fff; }
+        #page-content-wrapper { width: 100%; padding: 20px; }
+        .navbar { background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; padding: 15px; }
+        .card { border: none; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
     </style>
 </head>
 <body>
-    <?php 
-        $role = $_SESSION['role'] ?? 'Guest'; 
-        $page = $_GET['page'] ?? 'dashboard';
-        $selectedClub = $_SESSION['selected_club_id'] ?? null;
-    ?>
-    <div id="wrapper">
-        <div id="sidebar-wrapper">
-            <div class="p-4 border-bottom border-secondary mb-3">
-                <h4 class="text-white fw-bold mb-0"><i class="fa-solid fa-gauge-high me-2 text-info"></i>Spor CRM</h4>
-            </div>
-            
-            <nav class="nav flex-column">
-                <a href="index.php?page=dashboard" class="nav-link <?php echo $page == 'dashboard' ? 'active' : ''; ?>">
-                    <i class="fa-solid fa-chart-pie me-2"></i> Dashboard
+
+<?php 
+$role = $_SESSION['role'] ?? 'Guest'; 
+$selectedClub = $_SESSION['selected_club_name'] ?? 'Sistem Geneli';
+?>
+
+<div id="wrapper">
+    <div id="sidebar-wrapper">
+        <div class="sidebar-heading border-bottom">
+            <i class="fa-solid fa-medal me-2"></i>SPOR CRM
+        </div>
+        <div class="list-group list-group-flush">
+            <a href="index.php?page=dashboard" class="list-group-item list-group-item-action">
+                <i class="fa-solid fa-house me-2"></i> Dashboard
+            </a>
+
+            <?php if ($role === 'SystemAdmin'): ?>
+                <div class="px-4 pt-3 pb-1 small text-uppercase text-secondary fw-bold" style="font-size: 10px;">Sistem Sahibi</div>
+                
+                <a href="index.php?page=clubs" class="list-group-item list-group-item-action">
+                    <i class="fa-solid fa-building me-2 text-info"></i> Kulüp Denetimi
                 </a>
 
-                <?php if($role === 'SystemAdmin'): ?>
-                    <div class="menu-header">SİSTEM MERKEZİ</div>
-                    <a href="index.php?page=clubs" class="nav-link <?php echo $page == 'clubs' ? 'active' : ''; ?>">
-                        <i class="fa-solid fa-building-shield me-2"></i> Kulüpler & Lisanslar
-                    </a>
-                    <a href="index.php?page=club_payments" class="nav-link <?php echo $page == 'club_payments' ? 'active' : ''; ?>">
-                        <i class="fa-solid fa-file-invoice-dollar me-2"></i> Kulüp Ödemeleri
-                    </a>
-                    <a href="index.php?page=system_settings" class="nav-link">
-                        <i class="fa-solid fa-gears me-2"></i> Genel Ayarlar
-                    </a>
-                <?php endif; ?>
+                <a href="index.php?page=system_finance" class="list-group-item list-group-item-action">
+                    <i class="fa-solid fa-wallet me-2 text-success"></i> Sistem Finans
+                </a>
+                
+            <?php endif; ?>
+            <?php if ($role === 'ClubAdmin' || isset($_SESSION['selected_club_id'])): ?>
+                <div class="px-4 pt-3 pb-1 small text-uppercase text-secondary fw-bold" style="font-size: 10px;">Kulüp Yönetimi</div>
+                <a href="index.php?page=students" class="list-group-item list-group-item-action">
+                    <i class="fa-solid fa-user-graduate me-2"></i> Öğrenciler
+                </a>
+                <a href="index.php?page=club_finance" class="list-group-item list-group-item-action">
+                    <i class="fa-solid fa-money-bill-transfer me-2"></i> Aidat Takibi
+                </a>
+            <?php endif; ?>
 
-                <?php if($role === 'ClubAdmin'): ?>
-                    <div class="menu-header">KULÜP OPERASYON</div>
-                    <a href="index.php?page=students" class="nav-link"><i class="fa-solid fa-users me-2"></i> Öğrenciler</a>
-                    <a href="index.php?page=groups" class="nav-link"><i class="fa-solid fa-layer-group me-2"></i> Gruplar</a>
-                    <a href="index.php?page=users" class="nav-link"><i class="fa-solid fa-user-tie me-2"></i> Antrenörler</a>
-                    <a href="index.php?page=payments" class="nav-link"><i class="fa-solid fa-lira-sign me-2"></i> Finans / Aidat</a>
-                <?php endif; ?>
-
-                <div class="mt-5 pt-3">
-                    <a href="index.php?page=logout" class="nav-link text-danger">
-                        <i class="fa-solid fa-power-off me-2"></i> Güvenli Çıkış
-                    </a>
-                </div>
-            </nav>
-        </div>
-
-        <div id="page-content-wrapper">
-            <nav class="navbar navbar-expand-lg py-3 px-4">
-                <div class="container-fluid">
-                    <div class="d-flex align-items-center">
-                        <span class="text-muted me-3 small">Oturum: <strong><?php echo $_SESSION['name']; ?></strong></span>
-                        <span class="badge bg-soft-primary text-primary border border-primary px-3"><?php echo $role; ?></span>
-                    </div>
-                </div>
-            </nav>
-            <div class="p-4">
-                <?php echo $content; ?>
-            </div>
+            <a href="index.php?page=logout" class="list-group-item list-group-item-action text-danger mt-5">
+                <i class="fa-solid fa-power-off me-2"></i> Güvenli Çıkış
+            </a>
         </div>
     </div>
+
+    <div id="page-content-wrapper">
+        <nav class="navbar d-flex justify-content-between">
+            <div class="fw-bold text-primary">
+                <i class="fa-solid fa-location-dot me-2"></i><?php echo $selectedClub; ?>
+            </div>
+            <div class="small">
+                <strong><?php echo $_SESSION['name']; ?></strong> (<?php echo $role; ?>)
+            </div>
+        </nav>
+
+        <div class="container-fluid">
+            <?php echo $content; ?>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
