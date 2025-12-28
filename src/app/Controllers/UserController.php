@@ -91,7 +91,20 @@ class UserController {
             exit;
         }
     }
-
+    public function detail() {
+        $clubId = $_GET['id'];
+        $db = (new Database())->getConnection();
+        
+        // Basit bir sorgu ile kulüp bilgilerini al
+        $sql = "SELECT * FROM Clubs WHERE ClubID = ?";
+        $stmt = $db->prepare($sql);
+        $stmt->execute([$clubId]);
+        $club = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+        // View dosyasını yükle (Layout içinde basılacak)
+        $content = __DIR__ . '/../Views/admin/club_detail.php';
+        include __DIR__ . '/../Views/layouts/admin_layout.php';
+    }
     // KULLANICI SİLME VEYA PASİFE ALMA
     public function delete() {
         $id = $_GET['id'];

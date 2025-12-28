@@ -9,43 +9,23 @@ class PaymentController {
     }
 
     public function index() {
-        $clubId = $_SESSION['club_id'] ?? null;
-        $role = $_SESSION['role'] ?? '';
-
-        if (!$clubId && $role !== 'SystemAdmin') { header("Location: index.php?page=login"); exit; }
-
-        // Ödemeleri Listele
-        $sql = "SELECT Payments.*, Students.FullName as StudentName, Groups.GroupName 
-                FROM Payments 
-                INNER JOIN Students ON Payments.StudentID = Students.StudentID
-                INNER JOIN Groups ON Students.GroupID = Groups.GroupID
-                WHERE Groups.ClubID = ?
-                ORDER BY Payments.PaymentDate DESC";
-        
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute([$clubId]);
-        $payments = $stmt->fetchAll();
-
-        // Öğrenci Listesi (Dropdown için)
-        $stmtStudents = $this->db->prepare("
-            SELECT Students.StudentID, Students.FullName, Groups.GroupName 
-            FROM Students 
-            INNER JOIN Groups ON Students.GroupID = Groups.GroupID
-            WHERE Groups.ClubID = ? AND Students.IsActive = 1
-            ORDER BY Students.FullName ASC
-        ");
-        $stmtStudents->execute([$clubId]);
-        $students = $stmtStudents->fetchAll();
-
-        // Toplam Kasa
-        $totalIncome = 0;
-        foreach($payments as $p) { $totalIncome += $p['Amount']; }
-
-        ob_start();
+        $role = $_SESSION['role'];
+        $clubId = $_SESSION['club_id'];
+    
+        if ($role === 'SystemAdmin') {
+            $stmt = $this->db->query("SELECT Payments.*, Students.FullName, Clubs.ClubName FROM Payments 
+                                      JOIN Students ON Payments.StudentID = Students.StudentID
+                                      JOIN Clubs ON Students.ClubID = Clubs.ClubID");
+        } else {
+            $stmt = $this->db->prepare("SELECT Payments.*, Students.FullName FROM Payments 
+                                        JOIN Students ON Payments.StudentID = Students.StudentID 
+                                        WHERE Students.ClubID = ?");
+            $stmt->execute([$clubId]);
+        }
+        $payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+        // SENİN LİSTENE GÖRE DOĞRU YOL:
         require_once __DIR__ . '/../Views/admin/payments.php';
-        $content = ob_get_clean();
-
-        require_once __DIR__ . '/../Views/layouts/admin_layout.php';
     }
 
     public function store() {

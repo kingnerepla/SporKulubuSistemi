@@ -1,5 +1,4 @@
 <?php
-require_once __DIR__ . '/../Config/Database.php';
 
 class DashboardController {
     private $db;
@@ -9,44 +8,56 @@ class DashboardController {
     }
 
     public function index() {
-        if (!isset($_SESSION['user_id'])) { header("Location: index.php?page=login"); exit; }
+        // Oturumdan rolü al, eğer yoksa 'Guest' ata
+        $role = $_SESSION['role'] ?? 'Guest';
+        
+        // View'a gönderilecek verileri hazırla
+        $data = [
+            'title' => 'Özet Panel',
+            'role'  => $role,
+            'name'  => $_SESSION['name'] ?? 'Kullanıcı'
+        ];
 
-        $role = $_SESSION['role'];
-        $clubId = $_SESSION['club_id'];
-        $stats = [];
-
-        try {
-            if ($role === 'SystemAdmin') {
-                // SÜPER YÖNETİCİ SORGULARI
-                $stats['total_clubs'] = $this->db->query("SELECT COUNT(*) FROM Clubs")->fetchColumn();
-                $stats['total_students'] = $this->db->query("SELECT COUNT(*) FROM Students WHERE IsActive = 1")->fetchColumn();
-                $stats['total_staff'] = $this->db->query("SELECT COUNT(*) FROM Users WHERE RoleID IN (2,3)")->fetchColumn();
-            } else {
-                // KULÜP YÖNETİCİSİ SORGULARI
-                // HATA BURADAYDI: Kolon adının doğruluğundan emin olmalıyız. 
-                // Eğer hata devam ederse veritabanında kolon adını 'KulupID' olarak kontrol et.
-                
-                $stmt = $this->db->prepare("SELECT COUNT(*) FROM Students WHERE ClubID = ? AND IsActive = 1");
-                $stmt->execute([$clubId]);
-                $stats['my_students'] = $stmt->fetchColumn();
-
-                $stmt = $this->db->prepare("SELECT COUNT(*) FROM Groups WHERE ClubID = ?");
-                $stmt->execute([$clubId]);
-                $stats['my_groups'] = $stmt->fetchColumn();
-
-                // Kullanıcılar tablosunda ClubID kolonu olmayabilir (Süper adminlerde boş olabilir)
-                $stmt = $this->db->prepare("SELECT COUNT(*) FROM Users WHERE ClubID = ?");
-                $stmt->execute([$clubId]);
-                $stats['my_staff'] = $stmt->fetchColumn();
-            }
-        } catch (PDOException $e) {
-            // Eğer hala kolon hatası alırsak, en azından ekranın açılması için sayıları 0 gösterelim
-            $stats['my_students'] = 0;
-            $stats['my_groups'] = 0;
-            $stats['my_staff'] = 0;
-            $stats['error_msg'] = "Bazı veriler kolon adı uyuşmazlığı nedeniyle çekilemedi.";
+        // Role göre hangi dashboard görünümünün yükleneceğine karar ver
+        // Views/admin/ altında bu dosyaların olması gerekir
+        switch ($role) {
+            case 'SystemAdmin':
+                $view = __DIR__ . '/../Views/admin/dashboard_system.php';
+                break;
+            case 'ClubAdmin':
+                $view = __DIR__ . '/../Views/admin/dashboard_club.php';
+                break;
+            case 'Teacher':
+                $view = __DIR__ . '/../Views/admin/dashboard_teacher.php';
+                break;
+            default:
+                $view = __DIR__ . '/../Views/admin/dashboard.php';
         }
 
-        require_once __DIR__ . '/../Views/admin/dashboard.php';
+        $this->render($view, $data);
+    }
+
+    private function render($viewPath, $data = []) {
+        // Dizideki anahtarları ($role, $title, $name) değişken olarak içeri aktarır
+        extract($data);
+        
+        ob_start();
+        if(file_exists($viewPath)) {
+            include $viewPath;
+        } else {
+            // Dosya yoksa kullanıcıya şık bir karşılama göster
+            echo "
+            <div class='container mt-5'>
+                <div class='card border-0 shadow-sm p-5 text-center'>
+                    <i class='fa-solid fa-person-digging fa-4x text-warning mb-3'></i>
+                    <h2 class='fw-bold'>Panel Hazırlanıyor</h2>
+                    <p class='text-muted'>Hoş geldiniz <strong>{$name}</strong> ({$role}). Bu bölüm için özel grafikler ve raporlar yakında burada olacak.</p>
+                </div>
+            </div>";
+        }
+        $content = ob_get_clean();
+        
+        // Ana layout'u çağır
+        include __DIR__ . '/../Views/layouts/admin_layout.php';
     }
 }
