@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  # 1. Veritabanı Servisi (SQL Server)
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mssql_server
+    platform: linux/amd64 # Apple Silicon (M1/M2/M3) işlemciler için uyumluluk
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=Ab_kulup_248 # Burayı mutlaka değiştirin ve unutmayın
+    ports:
+      - "1433:1433"
+    volumes:
+      - sql_data:/var/opt/mssql # Verilerin kalıcı olması için
+
+  # 2. Web Sunucusu (PHP + Apache)
+  web:
+    build: .
+    container_name: php_web
+    ports:
+      - "8080:80" # Tarayıcıda localhost:8080 olarak gireceksiniz
+    volumes:
+      - ./src:/var/www/html # src klasörünü container içine bağlar
+    depends_on:
+      - db
+
+volumes:
+  sql_data:
