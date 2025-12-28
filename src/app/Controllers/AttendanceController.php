@@ -1,5 +1,4 @@
 <?php
-require_once __DIR__ . '/../Config/Database.php';
 
 class AttendanceController {
     private $db;
@@ -8,88 +7,79 @@ class AttendanceController {
         $this->db = (new Database())->getConnection();
     }
 
-    // 1. Yoklama Alınacak Grubu Seçme Ekranı
+    // Yoklama Ana Sayfası (Grup Seçimi ve Tarih)
     public function index() {
-        if (!isset($_SESSION['user_id'])) { header("Location: index.php?page=login"); exit; }
-        
-        $clubId = $_SESSION['club_id'];
-        $role = $_SESSION['role'];
-        $userId = $_SESSION['user_id'];
-
-        // EĞER ANTRENÖRSE SADECE KENDİ GRUPLARINI GETİR
-        if ($role === 'Trainer') {
-            $stmt = $this->db->prepare("SELECT * FROM Groups WHERE ClubID = ? AND TrainerID = ? ORDER BY GroupName ASC");
-            $stmt->execute([$clubId, $userId]);
-        } 
-        // YÖNETİCİLER HEPSİNİ GÖRÜR
-        else {
-            $stmt = $this->db->prepare("SELECT * FROM Groups WHERE ClubID = ? ORDER BY GroupName ASC");
-            $stmt->execute([$clubId]);
-        }
-        
-        $groups = $stmt->fetchAll();
-
-        // ... (Kalan kodlar aynı) ...
-
-    // 2. Seçilen Grubun Öğrenci Listesini Getir (Form)
-    public function take() {
+        $clubId = $_SESSION['club_id'] ?? $_SESSION['selected_club_id'];
         $groupId = $_GET['group_id'] ?? null;
-        $date = $_GET['date'] ?? date('Y-m-d'); // Tarih seçilmediyse bugün
+        $date = $_GET['date'] ?? date('Y-m-d');
 
-        if (!$groupId) {
-            header("Location: index.php?page=attendance");
-            exit;
+        // Kulübün gruplarını getir
+        $stmtGroups = $this->db->prepare("SELECT * FROM Groups WHERE ClubID = ?");
+        $stmtGroups->execute([$clubId]);
+        $groups = $stmtGroups->fetchAll(PDO::FETCH_ASSOC);
+
+        $students = [];
+        if ($groupId) {
+            // Seçili gruptaki öğrencileri ve o tarihteki mevcut yoklama durumunu getir
+            $sql = "SELECT s.StudentID, s.FullName, 
+                    (SELECT Status FROM Attendance WHERE StudentID = s.StudentID AND AttendanceDate = ?) as AttendanceStatus
+                    FROM Students s 
+                    WHERE s.GroupID = ? AND s.IsActive = 1";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$date, $groupId]);
+            $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
 
-        // Grup Bilgisi
-        $stmt = $this->db->prepare("SELECT * FROM Groups WHERE GroupID = ?");
-        $stmt->execute([$groupId]);
-        $group = $stmt->fetch();
-
-        // O gruptaki öğrencileri çek
-        $stmtStudents = $this->db->prepare("SELECT * FROM Students WHERE GroupID = ? AND IsActive = 1");
-        $stmtStudents->execute([$groupId]);
-        $students = $stmtStudents->fetchAll();
-
-        // Daha önce o gün için yoklama alınmış mı? (Varsa onları getir)
-        $stmtCheck = $this->db->prepare("SELECT StudentID, IsPresent FROM Attendance WHERE GroupID = ? AND Date = ?");
-        $stmtCheck->execute([$groupId, $date]);
-        $existingRecords = $stmtCheck->fetchAll(PDO::FETCH_KEY_PAIR); // [StudentID => IsPresent] formatında döner
-
-        ob_start();
-        require_once __DIR__ . '/../Views/admin/attendance_form.php';
-        $content = ob_get_clean();
-
-        require_once __DIR__ . '/../Views/layouts/admin_layout.php';
+        $this->render('attendance_take', [
+            'groups' => $groups, 
+            'students' => $students, 
+            'selectedGroup' => $groupId,
+            'selectedDate' => $date
+        ]);
     }
 
-    // 3. Yoklamayı Kaydet
-    public function store() {
+    // Yoklamayı Kaydetme
+    public function save() {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $clubId = $_SESSION['club_id'] ?? $_SESSION['selected_club_id'];
             $groupId = $_POST['group_id'];
             $date = $_POST['date'];
-            $attendanceData = $_POST['attendance'] ?? []; // İşaretlenenler (Sadece 'Geldi' olanlar gelir)
+            $attendanceData = $_POST['status'] ?? []; // Gelen öğrenciler [student_id => status]
 
-            // Önce o günün eski kaydını temizle (Güncelleme mantığı yerine Sil-Yükle yapıyoruz, daha basit)
-            $delStmt = $this->db->prepare("DELETE FROM Attendance WHERE GroupID = ? AND Date = ?");
-            $delStmt->execute([$groupId, $date]);
+            try {
+                $this->db->beginTransaction();
 
-            // Yeni kayıtları ekle
-            $insStmt = $this->db->prepare("INSERT INTO Attendance (GroupID, StudentID, Date, IsPresent) VALUES (?, ?, ?, ?)");
+                // Önce o günün o grup için eski kayıtlarını temizle (Update yerine Re-insert mantığı daha pratiktir)
+                $del = $this->db->prepare("DELETE FROM Attendance WHERE GroupID = ? AND AttendanceDate = ?");
+                $del->execute([$groupId, $date]);
 
-            // Formdan gelen tüm öğrencileri döngüye sokmalıyız ama $_POST['attendance'] sadece checkbox işaretli olanları gönderir.
-            // Bu yüzden önce o grubun TÜM öğrencilerini bilmeliyiz.
-            $allStudents = $this->db->prepare("SELECT StudentID FROM Students WHERE GroupID = ?");
-            $allStudents->execute([$groupId]);
-            
-            foreach ($allStudents->fetchAll() as $student) {
-                $studentId = $student['StudentID'];
-                // Eğer checkbox işaretliyse 1, değilse 0
-                $isPresent = isset($attendanceData[$studentId]) ? 1 : 0;
-                $insStmt->execute([$groupId, $studentId, $date, $isPresent]);
+                // Yeni yoklamayı ekle
+                $ins = $this->db->prepare("INSERT INTO Attendance (StudentID, GroupID, ClubID, AttendanceDate, Status, CreatedBy) VALUES (?, ?, ?, ?, ?, ?)");
+                
+                // Gruptaki tüm aktif öğrencileri al
+                $stmtAll = $this->db->prepare("SELECT StudentID FROM Students WHERE GroupID = ? AND IsActive = 1");
+                $stmtAll->execute([$groupId]);
+                $allStudents = $stmtAll->fetchAll(PDO::FETCH_ASSOC);
+
+                foreach ($allStudents as $std) {
+                    $status = isset($attendanceData[$std['StudentID']]) ? 1 : 0;
+                    $ins->execute([$std['StudentID'], $groupId, $clubId, $date, $status, $_SESSION['user_id']]);
+                }
+
+                $this->db->commit();
+                header("Location: index.php?page=attendance&group_id=$groupId&date=$date&success=1");
+            } catch (Exception $e) {
+                $this->db->rollBack();
+                die("Yoklama Hatası: " . $e->getMessage());
             }
-
-            header("Location: index.php?page=attendance&success=1");
         }
+    }
+
+    private function render($view, $data = []) {
+        extract($data);
+        ob_start();
+        include __DIR__ . "/../Views/admin/{$view}.php";
+        $content = ob_get_clean();
+        include __DIR__ . '/../Views/layouts/admin_layout.php';
     }
 }

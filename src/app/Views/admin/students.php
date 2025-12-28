@@ -1,52 +1,78 @@
-<div class="container-fluid p-0">
+<div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h3 class="fw-bold text-dark"><i class="fa-solid fa-user-graduate text-primary me-2"></i>Öğrenci Yönetimi</h3>
-            <p class="text-muted small mb-0"><?php echo htmlspecialchars($clubName); ?> bünyesindeki tüm aktif öğrenciler.</p>
-        </div>
-        <button class="btn btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#addStudentModal">
-            <i class="fa-solid fa-user-plus me-2"></i>Yeni Öğrenci Kaydet
-        </button>
+        <h3 class="fw-bold"><i class="fa-solid fa-users text-warning me-2"></i>Öğrenci Yönetimi</h3>
+        <a href="index.php?page=student_add" class="btn btn-primary shadow-sm">
+            <i class="fa-solid fa-user-plus me-2"></i>Yeni Öğrenci Ekle
+        </a>
     </div>
+
+    <?php if(isset($_GET['success'])): ?>
+        <div class="alert alert-success alert-dismissible fade show border-0 shadow-sm mb-4" role="alert">
+            <i class="fa-solid fa-check-circle me-2"></i> İşlem başarıyla tamamlandı.
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    <?php endif; ?>
 
     <div class="card border-0 shadow-sm">
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
-                    <thead class="bg-light">
+                    <thead class="bg-light text-muted">
                         <tr>
-                            <th class="ps-4">No</th>
-                            <th>Öğrenci Adı Soyadı</th>
+                            <th class="ps-4">Öğrenci</th>
+                            <th>Veli / Telefon</th>
                             <th>Grup</th>
-                            <th>TC Kimlik</th>
-                            <th>Veli Telefon</th>
-                            <th>Durum</th>
+                            <th>Aylık Aidat</th>
                             <th class="text-end pe-4">İşlem</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if(!empty($students)): ?>
                             <?php foreach($students as $s): ?>
-                                <tr>
-                                    <td class="ps-4 text-muted small">#<?php echo $s['StudentID'] ?? $s['id']; ?></td>
-                                    <td class="fw-bold"><?php echo htmlspecialchars($s['FullName'] ?? $s['fullname']); ?></td>
-                                    <td><span class="badge bg-info-subtle text-info"><?php echo htmlspecialchars($s['GroupName'] ?? 'Grup Atanmadı'); ?></span></td>
-                                    <td><?php echo $s['TCNo'] ?? '-'; ?></td>
-                                    <td><?php echo $s['ParentPhone'] ?? '-'; ?></td>
-                                    <td>
-                                        <span class="badge bg-success-subtle text-success">Aktif</span>
-                                    </td>
-                                    <td class="text-end pe-4">
-                                        <button class="btn btn-sm btn-outline-primary"><i class="fa-solid fa-pen-to-square"></i></button>
-                                        <button class="btn btn-sm btn-outline-danger"><i class="fa-solid fa-trash"></i></button>
-                                    </td>
-                                </tr>
+                            <tr>
+                                <td class="ps-4">
+                                    <div class="fw-bold text-dark"><?= htmlspecialchars($s['FullName']) ?></div>
+                                    <small class="text-muted">ID: #<?= $s['StudentID'] ?></small>
+                                </td>
+                                <td>
+                                    <div class="text-dark"><?= htmlspecialchars($s['ParentName'] ?? 'Belirtilmemiş') ?></div>
+                                    <small class="text-primary fw-medium">
+                                        <i class="fa-solid fa-phone-flip fa-xs me-1"></i><?= $s['ParentPhone'] ?? '-' ?>
+                                    </small>
+                                </td>
+                                <td>
+                                    <?php if(!empty($s['GroupName'])): ?>
+                                        <span class="badge bg-info-subtle text-info border border-info-subtle px-3 py-2"><?= $s['GroupName'] ?></span>
+                                    <?php else: ?>
+                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-3 py-2">Grup Atanmadı</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="fw-bold text-success font-monospace"><?= number_format($s['MonthlyFee'], 2) ?> ₺</td>
+                                <td class="text-end pe-4">
+                                    <button class="btn btn-sm btn-light text-info border me-1" 
+                                            onclick="showParentInfo('<?= htmlspecialchars($s['FullName']) ?>', '<?= $s['ParentPhone'] ?>')"
+                                            title="Veli Giriş Bilgileri">
+                                        <i class="fa-solid fa-key"></i>
+                                    </button>
+                                    
+                                    <a href="index.php?page=student_edit&id=<?= $s['StudentID'] ?>" 
+                                       class="btn btn-sm btn-light text-secondary border me-1" title="Düzenle">
+                                        <i class="fa-solid fa-pen"></i>
+                                    </a>
+                                    
+                                    <a href="index.php?page=student_delete&id=<?= $s['StudentID'] ?>" 
+                                       class="btn btn-sm btn-light text-danger border" 
+                                       onclick="return confirm('Bu öğrenciyi silmek istediğinize emin misiniz?')" title="Sil">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </a>
+                                </td>
+                            </tr>
                             <?php endforeach; ?>
                         <?php else: ?>
                             <tr>
-                                <td colspan="7" class="text-center py-5">
-                                    <img src="https://cdn-icons-png.flaticon.com/512/5087/5087579.png" width="80" class="opacity-25 mb-3 d-block mx-auto">
-                                    <span class="text-muted">Henüz öğrenci kaydı bulunmuyor.</span>
+                                <td colspan="5" class="text-center py-5">
+                                    <div class="text-muted mb-2"><i class="fa-solid fa-user-slash fa-3x"></i></div>
+                                    <div class="text-muted">Henüz öğrenci kaydı bulunmuyor.</div>
                                 </td>
                             </tr>
                         <?php endif; ?>
@@ -57,39 +83,45 @@
     </div>
 </div>
 
-<div class="modal fade" id="addStudentModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+<div class="modal fade" id="parentInfoModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">Yeni Öğrenci Kayıt Formu</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title"><i class="fa-solid fa-id-card me-2"></i>Veli Giriş Bilgileri</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form action="index.php?page=student_store" method="POST">
-                <div class="modal-body">
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Ad Soyad</label>
-                            <input type="text" name="full_name" class="form-control" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">TC Kimlik No</label>
-                            <input type="text" name="tc_no" class="form-control" maxlength="11">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Doğum Tarihi</label>
-                            <input type="date" name="birth_date" class="form-control">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Veli Telefon</label>
-                            <input type="text" name="parent_phone" class="form-control" required>
-                        </div>
-                    </div>
+            <div class="modal-body text-center p-4">
+                <p class="text-muted mb-4"><strong id="m_student_name" class="text-dark"></strong> isimli öğrencinin velisi için giriş bilgileri:</p>
+                
+                <div class="bg-light p-3 rounded-3 mb-3 border">
+                    <small class="text-uppercase fw-bold text-muted d-block mb-1">Kullanıcı Adı (Telefon)</small>
+                    <span class="fs-4 fw-bold text-dark font-monospace" id="m_phone"></span>
                 </div>
-                <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Vazgeç</button>
-                    <button type="submit" class="btn btn-primary px-4">Kaydet</button>
+                
+                <div class="bg-light p-3 rounded-3 border">
+                    <small class="text-uppercase fw-bold text-muted d-block mb-1">Geçici Şifre</small>
+                    <span class="fs-4 fw-bold text-success font-monospace">123456</span>
                 </div>
-            </form>
+
+                <div class="alert alert-info mt-4 mb-0 text-start" style="font-size: 0.85rem;">
+                    <i class="fa-solid fa-info-circle me-2"></i> Veli bu bilgilerle sisteme giriş yaparak aidat takibi yapabilir ve yoklama durumunu görebilir.
+                </div>
+            </div>
+            <div class="modal-footer border-0 pb-4 justify-content-center">
+                <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">Kapat</button>
+            </div>
         </div>
     </div>
 </div>
+
+<script>
+function showParentInfo(student, phone) {
+    // Modal içeriğini doldur
+    document.getElementById('m_student_name').innerText = student;
+    document.getElementById('m_phone').innerText = phone;
+    
+    // Modalı göster
+    var myModal = new bootstrap.Modal(document.getElementById('parentInfoModal'));
+    myModal.show();
+}
+</script>

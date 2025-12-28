@@ -61,7 +61,9 @@
                                     data-trainer="<?php echo $group['TrainerID'] ?? ''; ?>">
                                 <i class="fa-solid fa-pen"></i> Düzenle
                             </button>
-
+                            <a href="index.php?page=group_schedule&id=<?= $group['GroupID'] ?>" class="btn btn-sm btn-outline-primary" title="Haftalık Program">
+                                <i class="fa-solid fa-calendar-days"></i> Program
+                            </a>
                             <a href="index.php?page=group_delete&id=<?php echo $group['GroupID']; ?>" 
                                class="btn btn-sm btn-outline-danger"
                                onclick="return confirm('UYARI: \nBu grubu silmek istediğinize emin misiniz?');">
