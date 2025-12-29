@@ -9,14 +9,16 @@ class AuthController {
 
     public function login() {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $email = trim($_POST['email'] ?? '');
+            // Formdaki 'email' inputu artık telefon numarasını da kabul eder
+            $loginValue = trim($_POST['email'] ?? '');
             $password = trim($_POST['password'] ?? '');
     
             try {
-                // Azure SQL üzerinde büyük/küçük harf duyarlılığına karşı IsActive kontrolü ile çekiyoruz
-                $sql = "SELECT * FROM Users WHERE Email = ? AND IsActive = 1";
+                // KRİTİK DÜZENLEME: Hem Email hem Phone kolonuna bakıyoruz. 
+                // Azure SQL ve diğer SQL sistemlerinde performans için IsActive indeksli olmalıdır.
+                $sql = "SELECT * FROM Users WHERE (Email = ? OR Phone = ?) AND IsActive = 1";
                 $stmt = $this->db->prepare($sql);
-                $stmt->execute([$email]);
+                $stmt->execute([$loginValue, $loginValue]);
                 $user = $stmt->fetch(PDO::FETCH_ASSOC);
     
                 if ($user) {
@@ -35,14 +37,14 @@ class AuthController {
                         $_SESSION['name']      = $user['FullName'] ?? 'Kullanıcı';
                         $_SESSION['club_id']   = $user['ClubID'] ?? null;
 
-                        // 2. Rol Belirleme (Kritik: Hem string hem ID olarak kaydediyoruz)
+                        // 2. Rol Belirleme
                         $detectedRole = $this->detectRole($user);
                         $_SESSION['role'] = $detectedRole;
                         $_SESSION['role_id'] = intval($user['RoleID'] ?? 0);
-                        $_SESSION['RoleID']  = intval($user['RoleID'] ?? 0); // Yedek (Büyük harf kullanan yerler için)
+                        $_SESSION['RoleID']  = intval($user['RoleID'] ?? 0);
 
-                        // 3. Yetkileri Set Etme
-                        $this->setSessionPermissions($detectedRole);
+                        // 3. Yetkileri Set Etme (Tüm kullanıcı verisini gönderiyoruz)
+                        $this->setSessionPermissions($user, $detectedRole);
     
                         session_write_close();
                         header("Location: index.php?page=dashboard");
@@ -54,6 +56,7 @@ class AuthController {
                 die("Sistemde bir hata oluştu. Lütfen daha sonra tekrar deneyiniz.");
             }
     
+            // Giriş başarısızsa hata mesajı ile dön
             header("Location: index.php?page=admin_login_form&error=credentials");
             exit;
         }
@@ -65,18 +68,31 @@ class AuthController {
             case 1:  return 'systemadmin';
             case 2:  return 'clubadmin';
             case 3:  return 'coach';      // Antrenör
-            case 4:  return 'parent';
+            case 4:  return 'parent';     // Veli
             case 5:  return 'student';
             default: return 'guest';
         }
     }
     
-    private function setSessionPermissions($role) {
-        // Finansal yetki veya diğer modül izinleri
+    private function setSessionPermissions($user, $role) {
+        // 1. Finansal yetki (Sadece Adminler görebilir)
         if ($role === 'systemadmin' || $role === 'clubadmin') {
             $_SESSION['can_view_finance'] = true;
         } else {
             $_SESSION['can_view_finance'] = false;
+        }
+
+        // 2. Antrenör için Rapor Yetkisi
+        // Veritabanındaki CanSeeReports kolonunu session'a aktarır
+        if ($role === 'coach') {
+            $_SESSION['can_see_reports'] = intval($user['CanSeeReports'] ?? 0);
+            // Sidebar'daki kontrol için yedek anahtar
+            $_SESSION['coach_report_access'] = intval($user['CanSeeReports'] ?? 0);
+        }
+
+        // 3. Veli için özel işaretleyici
+        if ($role === 'parent') {
+            $_SESSION['is_parent'] = true;
         }
     }
 

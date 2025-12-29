@@ -137,6 +137,7 @@ function safe_load($controllerName, $methodName) {
         case 'students_archived': safe_load('StudentController', 'archived'); break;
         case 'student_restore':  safe_load('StudentController', 'restore'); break;
         case 'parent_attendance': safe_load('ParentController', 'attendance'); break;
+        case 'parent_payments':   safe_load('ParentController', 'payments'); break;
         case 'attendance_report': safe_load('AttendanceController', 'report'); break;
         case 'attendance_report': safe_load('AttendanceController', 'report'); break;
         case 'daily_attendance': safe_load('AttendanceController', 'index'); break;

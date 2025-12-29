@@ -59,6 +59,37 @@ class ParentController {
         // View'a gönder
         include __DIR__ . '/../Views/parent/parent_dashboard.php';
     }
+    public function index() {
+        $db = (new Database())->getConnection();
+        $parentId = $_SESSION['user_id'];
+        $clubId = $_SESSION['club_id'];
+    
+        // 1. Veliye ait öğrencileri ve gruplarını çek
+        $sql = "SELECT s.StudentID, s.FullName, g.GroupName, g.GroupID 
+                FROM Students s 
+                LEFT JOIN Groups g ON s.GroupID = g.GroupID 
+                WHERE s.ParentID = ? AND s.ClubID = ?";
+        $stmt = $db->prepare($sql);
+        $stmt->execute([$parentId, $clubId]);
+        $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+        // 2. Her öğrenci için son 5 yoklamayı ve genel katılım oranını çek
+        foreach ($students as &$student) {
+            $stmtA = $db->prepare("SELECT TOP 5 AttendanceDate, Status FROM Attendance WHERE StudentID = ? ORDER BY AttendanceDate DESC");
+            $stmtA->execute([$student['StudentID']]);
+            $student['last_attendance'] = $stmtA->fetchAll(PDO::FETCH_ASSOC);
+        }
+    
+        // 3. Basit istatistikler (Örnek veriler)
+        $attendanceRate = 92; // Hesaplama eklenebilir
+        $paymentStatus = "Güncel"; // Finans tablosundan kontrol edilecek
+    
+        $this->render('dashboard', [
+            'students' => $students,
+            'attendanceRate' => $attendanceRate,
+            'paymentStatus' => $paymentStatus
+        ]);
+    }
     public function authenticate() {
         // app/Controllers/ParentController.php -> authenticate metodu içi
         if ($isValid) {
