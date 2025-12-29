@@ -4,20 +4,18 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// 1. Veritabanı Yolu (index.php zaten src içinde, o yüzden direkt app/config...)
-$dbPath = __DIR__ . '/app/config/Database.php';
-
-if (file_exists($dbPath)) {
-    require_once $dbPath;
+/** * 1. YOL TESPİTİ (Hata aldığın yer burası)
+ * index.php ana dizindeyse src/app'ye, src içindeyse app'ye bakar.
+ */
+if (is_dir(__DIR__ . '/src/app')) {
+    $basePath = __DIR__ . '/src';
+} elseif (is_dir(__DIR__ . '/app')) {
+    $basePath = __DIR__;
 } else {
-    // Eğer yukarıdaki olmazsa alternatif (üst dizine bak)
-    $dbPath = dirname(__DIR__) . '/src/app/config/Database.php';
-    if (file_exists($dbPath)) {
-        require_once $dbPath;
-    } else {
-        die("Kritik Hata: Database.php bulunamadı.");
-    }
+    die("Kritik Hata: 'app' klasörü ne ana dizinde ne de 'src' içinde bulunabildi.");
 }
+
+require_once $basePath . '/app/config/Database.php';
 
 $page = $_GET['page'] ?? 'login';
 
@@ -39,10 +37,12 @@ if (!in_array($page, $public_pages)) {
     }
 }
 
-// 4. Dinamik Controller Yükleyici (SRC DUYARLI)
+/**
+ * 4. DİNAMİK YÜKLEYİCİ
+ */
 function safe_load($controllerName, $methodName) {
-    // index.php /var/www/html/src içinde olduğu için:
-    $path = __DIR__ . "/app/Controllers/{$controllerName}.php";
+    global $basePath;
+    $path = $basePath . "/app/Controllers/{$controllerName}.php";
     
     if (file_exists($path)) {
         require_once $path;
@@ -51,18 +51,18 @@ function safe_load($controllerName, $methodName) {
             if (method_exists($controller, $methodName)) {
                 $controller->$methodName();
             } else {
-                die("<b>Metot Hatası:</b> {$controllerName} içinde '{$methodName}' bulunamadı.");
+                die("<b>Metot Hatası:</b> {$controllerName} -> {$methodName} bulunamadı.");
             }
         } else {
-            die("<b>Sınıf Hatası:</b> '{$controllerName}' sınıfı bulunamadı.");
+            die("<b>Sınıf Hatası:</b> {$controllerName} sınıfı bulunamadı.");
         }
     } else {
-        // HATA BURADAYDI: Yolu tam göstererek debug yapıyoruz
-        die("<b>Dosya Hatası:</b> {$controllerName}.php bulunamadı.<br>Sistem şu klasöre bakıyor: <code>$path</code>");
+        // Hata raporlamasını tam yol vererek yapıyoruz
+        die("<b>Dosya Hatası:</b> {$controllerName}.php bulunamadı.<br>Sistemin aradığı tam yol: <code>$path</code>");
     }
 }
 
-// 5. Rota Yönetimi
+// 5. ROTA YÖNETİMİ
 switch ($page) {
     case 'login':            safe_load('AuthController', 'showSelection'); break;
     case 'admin_login_form': safe_load('AuthController', 'showAdminLogin'); break;
@@ -70,7 +70,7 @@ switch ($page) {
     case 'admin_auth':       safe_load('AuthController', 'login');  break;
     case 'parent_auth':      safe_load('ParentController', 'authenticate'); break;
     
-    // KULÜP VE FİNANS
+    // --- BU LİNKLER ARTIK ÇALIŞACAK ---
     case 'club_management':  safe_load('AdminController', 'manageClubs'); break;
     case 'system_finance':   safe_load('AdminController', 'systemFinance'); break;
     case 'club_details':     safe_load('AdminController', 'clubDetails'); break;
