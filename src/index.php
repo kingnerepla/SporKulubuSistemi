@@ -133,7 +133,12 @@ function safe_load($controllerName, $methodName) {
         case 'coach_update': safe_load('CoachController', 'update'); break;
         case 'group_update': safe_load('GroupController', 'update'); break;
         // Günlük Yoklama (AttendanceController)
-  
+        // Öğrenci Arşivi ve Geri Yükleme Linkleri
+        case 'students_archived': safe_load('StudentController', 'archived'); break;
+        case 'student_restore':  safe_load('StudentController', 'restore'); break;
+        case 'parent_attendance': safe_load('ParentController', 'attendance'); break;
+        case 'attendance_report': safe_load('AttendanceController', 'report'); break;
+        case 'attendance_report': safe_load('AttendanceController', 'report'); break;
         case 'daily_attendance': safe_load('AttendanceController', 'index'); break;
         case 'take_attendance':  safe_load('AttendanceController', 'take'); break; // Alternatif link ismi için 
         // --- SİSTEM ÇIKIŞ ---

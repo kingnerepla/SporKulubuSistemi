@@ -11,11 +11,19 @@
                     <form action="index.php?page=student_store" method="POST" id="studentForm">
                         
                         <h6 class="text-secondary fw-bold mb-3 border-bottom pb-2">Öğrenci Bilgileri</h6>
-                        <div class="row mb-4">
+                        <div class="row mb-2">
                             <div class="col-md-6 mb-3">
-                                <label class="form-label small fw-bold">Öğrenci Ad Soyad</label>
+                                <label class="form-label small fw-bold">Öğrenci Ad Soyad <span class="text-danger">*</span></label>
                                 <input type="text" name="student_name" class="form-control" placeholder="Örn: Ali Yılmaz" required>
                             </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Doğum Tarihi <span class="text-danger">*</span></label>
+                                <input type="text" name="birth_date" id="birth_date_mask" class="form-control" placeholder="GG.AA.YYYY" required>
+                                <small class="text-muted" style="font-size: 0.7rem;">Yaş hesabı için gereklidir.</small>
+                            </div>
+                        </div>
+
+                        <div class="row mb-4">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label small fw-bold">Dahil Olacağı Grup (Opsiyonel)</label>
                                 <select name="group_id" class="form-select">
@@ -25,16 +33,20 @@
                                     <?php endforeach; ?>
                                 </select>
                             </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label small fw-bold">Eğitmen Notu / Sağlık Notu</label>
+                                <textarea name="notes" class="form-control" rows="1" placeholder="Alerji, sakatlık veya özel notlar..."></textarea>
+                            </div>
                         </div>
 
                         <h6 class="text-secondary fw-bold mb-3 border-bottom pb-2">Veli ve Hesap Bilgileri</h6>
-                        <div class="row">
+                        <div class="row mb-4">
                             <div class="col-md-6 mb-3">
-                                <label class="form-label small fw-bold">Veli Ad Soyad</label>
+                                <label class="form-label small fw-bold">Veli Ad Soyad <span class="text-danger">*</span></label>
                                 <input type="text" name="parent_name" class="form-control" placeholder="Örn: Mehmet Yılmaz" required>
                             </div>
                             <div class="col-md-6 mb-3">
-                                <label class="form-label small fw-bold">Veli Telefon (Giriş ID)</label>
+                                <label class="form-label small fw-bold">Veli Telefon (Giriş ID) <span class="text-danger">*</span></label>
                                 <input type="text" name="phone" id="phone_mask" class="form-control" placeholder="0(5xx) xxx xx xx" required>
                                 <div class="form-text text-info" style="font-size: 0.75rem;">
                                     <i class="fa-solid fa-circle-info me-1"></i> Bu numara velinin giriş adı olacaktır.
@@ -42,7 +54,8 @@
                             </div>
                         </div>
 
-                        <div class="row mt-3">
+                        <h6 class="text-success fw-bold mb-3 border-bottom pb-2">Finansal Bilgiler</h6>
+                        <div class="row">
                             <div class="col-md-12 mb-4">
                                 <label class="form-label small fw-bold">Aylık Sabit Aidat Tutarı</label>
                                 <div class="input-group">
@@ -53,7 +66,7 @@
                         </div>
 
                         <div class="d-grid gap-2 d-md-flex justify-content-md-end border-top pt-3">
-                            <a href="index.php?page=students" class="btn btn-light px-4">İptal</a>
+                            <a href="index.php?page=students" class="btn btn-light px-4 border">İptal</a>
                             <button type="submit" class="btn btn-primary px-5 shadow-sm">
                                 <i class="fa-solid fa-check me-2"></i>Kaydı Tamamla
                             </button>
@@ -72,5 +85,8 @@
 $(document).ready(function(){
     // Türkiye Telefon Formatı Maskesi
     $('#phone_mask').mask('0(500) 000 00 00');
+    
+    // Doğum Tarihi Maskesi (GG.AA.YYYY)
+    $('#birth_date_mask').mask('00.00.0000');
 });
 </script>

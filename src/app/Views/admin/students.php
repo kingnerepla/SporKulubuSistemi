@@ -1,14 +1,29 @@
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3 class="fw-bold"><i class="fa-solid fa-users text-warning me-2"></i>Öğrenci Yönetimi</h3>
-        <a href="index.php?page=student_add" class="btn btn-primary shadow-sm">
-            <i class="fa-solid fa-user-plus me-2"></i>Yeni Öğrenci Ekle
-        </a>
+        <div>
+            <h3 class="fw-bold mb-1"><i class="fa-solid fa-users text-warning me-2"></i>Öğrenci Yönetimi</h3>
+            <p class="text-muted small mb-0">Kulübünüzdeki aktif öğrencilerin listesi.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="index.php?page=students_archived" class="btn btn-outline-secondary shadow-sm">
+                <i class="fa-solid fa-box-archive me-2"></i>Eski Öğrenciler
+            </a>
+            <a href="index.php?page=student_add" class="btn btn-primary shadow-sm">
+                <i class="fa-solid fa-user-plus me-2"></i>Yeni Öğrenci Ekle
+            </a>
+        </div>
     </div>
 
     <?php if(isset($_GET['success'])): ?>
         <div class="alert alert-success alert-dismissible fade show border-0 shadow-sm mb-4" role="alert">
             <i class="fa-solid fa-check-circle me-2"></i> İşlem başarıyla tamamlandı.
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    <?php endif; ?>
+
+    <?php if(isset($_GET['status']) && $_GET['status'] == 'restored'): ?>
+        <div class="alert alert-info alert-dismissible fade show border-0 shadow-sm mb-4" role="alert">
+            <i class="fa-solid fa-rotate-left me-2"></i> Öğrenci arşivden başarıyla geri yüklendi.
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     <?php endif; ?>
@@ -19,7 +34,7 @@
                 <table class="table table-hover align-middle mb-0">
                     <thead class="bg-light text-muted">
                         <tr>
-                            <th class="ps-4">Öğrenci</th>
+                            <th class="ps-4">Öğrenci / Yaş</th>
                             <th>Veli / Telefon</th>
                             <th>Grup</th>
                             <th>Aylık Aidat</th>
@@ -32,7 +47,17 @@
                             <tr>
                                 <td class="ps-4">
                                     <div class="fw-bold text-dark"><?= htmlspecialchars($s['FullName']) ?></div>
-                                    <small class="text-muted">ID: #<?= $s['StudentID'] ?></small>
+                                    <small class="text-muted">
+                                        ID: #<?= $s['StudentID'] ?> | 
+                                        <?php 
+                                            if(!empty($s['BirthDate'])) {
+                                                $age = date_diff(date_create($s['BirthDate']), date_create('today'))->y;
+                                                echo '<span class="text-primary fw-medium">' . $age . ' Yaş</span>';
+                                            } else {
+                                                echo '<span class="text-danger small italic">Yaş Girilmemiş</span>';
+                                            }
+                                        ?>
+                                    </small>
                                 </td>
                                 <td>
                                     <div class="text-dark"><?= htmlspecialchars($s['ParentName'] ?? 'Belirtilmemiş') ?></div>
@@ -62,7 +87,7 @@
                                     
                                     <a href="index.php?page=student_delete&id=<?= $s['StudentID'] ?>" 
                                        class="btn btn-sm btn-light text-danger border" 
-                                       onclick="return confirm('Bu öğrenciyi silmek istediğinize emin misiniz?')" title="Sil">
+                                       onclick="return confirm('Bu öğrenciyi silip arşive göndermek istediğinize emin misiniz?')" title="Sil">
                                         <i class="fa-solid fa-trash"></i>
                                     </a>
                                 </td>
@@ -72,7 +97,7 @@
                             <tr>
                                 <td colspan="5" class="text-center py-5">
                                     <div class="text-muted mb-2"><i class="fa-solid fa-user-slash fa-3x"></i></div>
-                                    <div class="text-muted">Henüz öğrenci kaydı bulunmuyor.</div>
+                                    <div class="text-muted">Henüz aktif bir öğrenci kaydı bulunmuyor.</div>
                                 </td>
                             </tr>
                         <?php endif; ?>
@@ -116,11 +141,8 @@
 
 <script>
 function showParentInfo(student, phone) {
-    // Modal içeriğini doldur
     document.getElementById('m_student_name').innerText = student;
     document.getElementById('m_phone').innerText = phone;
-    
-    // Modalı göster
     var myModal = new bootstrap.Modal(document.getElementById('parentInfoModal'));
     myModal.show();
 }
