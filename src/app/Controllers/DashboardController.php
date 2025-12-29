@@ -8,67 +8,74 @@ class DashboardController {
     }
 
     public function index() {
-        // 1. Session verilerini ham halleriyle alalım
-        $role = $_SESSION['role'] ?? 'Guest';
-        $roleId = isset($_SESSION['role_id']) ? intval($_SESSION['role_id']) : 0;
-        $name = $_SESSION['name'] ?? 'Kullanıcı';
-        $clubId = $_SESSION['club_id'] ?? null;
-        $userId = $_SESSION['user_id'] ?? null;
-
-        // --- TEŞHİS SATIRI (Sorun Çözülene Kadar Kalsın) ---
-        // echo "Role: $role | RoleID: $roleId | ClubID: $clubId | UserID: $userId"; 
+        // 1. Verileri temizle
+        $s_role   = trim(strtolower((string)($_SESSION['role'] ?? '')));
+        $s_roleId = trim((string)($_SESSION['role_id'] ?? $_SESSION['RoleID'] ?? '0'));
+        $userId   = $_SESSION['user_id'] ?? null;
+        $clubId   = $_SESSION['club_id'] ?? null;
 
         $stats = ['totalClubs' => 0, 'totalStudents' => 0, 'totalGroups' => 0, 'totalCoaches' => 0];
         $todayTrainings = [];
-        $recentActivity = [];
+        $viewPath = "";
 
-        // 2. DOSYA YOLUNU DİNAMİK OLARAK BELİRLEYELİM
-        $viewPath = ""; 
-        $checkRole = strtolower(trim($role));
+        // 2. ROL BELİRLEME (Switch-Case ile daha okunaklı ve güvenli)
+        if ($s_roleId === "3" || $s_role === "coach") {
+            $viewPath = 'admin/coach_dashboard.php';
+        } elseif ($s_roleId === "2" || $s_role === "clubadmin") {
+            $viewPath = 'admin/dashboard_club.php';
+        } elseif ($s_roleId === "1" || $s_role === "systemadmin") {
+            $viewPath = 'admin/dashboard.php';
+        }
 
+        // 3. GÜVENLİK KONTROLÜ (Eğer hâlâ boşsa)
+        if (empty($viewPath)) {
+            die("Erişim Hatası! <br> Gelen ID: '$s_roleId' <br> Gelen Rol: '$s_role'");
+        }
+
+        // 4. VERİLERİ ÇEK (Sadece belirlenen role göre)
         try {
-            // ÖNCE ANTRENÖRÜ KONTROL EDELİM
-            if ($roleId === 3 || $checkRole === 'coach') {
-                if ($clubId && $userId) {
-                    $stats['totalStudents'] = $this->getScalar("SELECT COUNT(s.StudentID) FROM Students s JOIN Groups g ON s.GroupID = g.GroupID WHERE g.TrainerID = ?", [$userId]);
-                    $stats['totalGroups'] = $this->getScalar("SELECT COUNT(*) FROM Groups WHERE TrainerID = ?", [$userId]);
-                    
-                    $sqlTrainings = "SELECT ts.*, g.GroupName FROM TrainingSchedule ts JOIN Groups g ON ts.GroupID = g.GroupID WHERE g.TrainerID = ? AND ts.TrainingDate = CAST(GETDATE() AS DATE)";
-                    $stmt = $this->db->prepare($sqlTrainings);
-                    $stmt->execute([$userId]);
-                    $todayTrainings = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                }
-                $viewPath = 'admin/coach_dashboard.php';
-            } 
-            // SONRA SİSTEM YÖNETİCİSİ
-            elseif ($roleId === 1 || $checkRole === 'systemadmin') {
+            if ($viewPath === 'admin/coach_dashboard.php' && $userId) {
+                // Antrenör verileri
+                $stats['totalStudents'] = $this->getScalar("SELECT COUNT(s.StudentID) FROM Students s JOIN Groups g ON s.GroupID = g.GroupID WHERE g.TrainerID = ? AND s.IsActive = 1", [$userId]);
+                $stats['totalGroups'] = $this->getScalar("SELECT COUNT(*) FROM Groups WHERE TrainerID = ?", [$userId]);
+      
+                // Bugünün antrenmanları sorgusu
+                $sql = "SELECT ts.*, g.GroupName,
+                        (SELECT COUNT(*) FROM Attendance WHERE SessionID = ts.SessionID) as AttendanceCount
+                        FROM TrainingSessions ts 
+                        JOIN Groups g ON ts.GroupID = g.GroupID 
+                        WHERE g.TrainerID = ? 
+                        ORDER BY ts.StartTime ASC"; // Not: Geliştirme aşamasında tüm dersleri görmek için tarih filtresi kaldırılmıştır.
+
+                $stmt = $this->db->prepare($sql);
+                $stmt->execute([$userId]);
+                $todayTrainings = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+       
+
+            } elseif ($viewPath === 'admin/dashboard_club.php' && $clubId) {
+                // Kulüp yöneticisi verileri
+                $stats['totalStudents'] = $this->getScalar("SELECT COUNT(*) FROM Students WHERE ClubID = ?", [$clubId]);
+                $stats['totalGroups'] = $this->getScalar("SELECT COUNT(*) FROM Groups WHERE ClubID = ?", [$clubId]);
+                $stats['totalCoaches'] = $this->getScalar("SELECT COUNT(*) FROM Users WHERE ClubID = ? AND RoleID = 3", [$clubId]);
+
+            } elseif ($viewPath === 'admin/dashboard.php') {
                 $stats['totalClubs'] = $this->getScalar("SELECT COUNT(*) FROM Clubs");
-                $viewPath = 'admin/dashboard.php';
-            } 
-            // HER ŞEYDEN ÖNCE EĞER HİÇBİRİ DEĞİLSE (VEYA ROLEID 2 İSE) KULÜP YÖNETİCİSİ
-            else {
-                if ($clubId) {
-                    $stats['totalStudents'] = $this->getScalar("SELECT COUNT(*) FROM Students WHERE ClubID = ?", [$clubId]);
-                    $stats['totalCoaches'] = $this->getScalar("SELECT COUNT(*) FROM Users WHERE ClubID = ? AND RoleID = 3", [$clubId]);
-                }
-                $viewPath = 'admin/dashboard_club.php';
             }
         } catch (Exception $e) {
-            error_log("Dashboard Hatası: " . $e->getMessage());
+            // Hata olsa bile sayfa yüklensin, sadece hata loglansın
+            error_log("Dashboard Veri Hatası: " . $e->getMessage());
         }
 
         $data = [
-            'role' => $role,
-            'name' => $name,
+            'role' => $_SESSION['role'] ?? '',
+            'name' => $_SESSION['name'] ?? 'Kullanıcı',
             'stats' => $stats,
             'todayTrainings' => $todayTrainings,
-            'recentActivity' => $recentActivity,
             'clubName' => $_SESSION['selected_club_name'] ?? $_SESSION['club_name'] ?? 'Yönetim Paneli'
         ];
 
-        // Tam yolu render metoduna gönderiyoruz
-        $fullPath = dirname(__DIR__) . '/Views/' . $viewPath;
-        $this->render($fullPath, $data);
+        $this->render(dirname(__DIR__) . '/Views/' . $viewPath, $data);
     }
 
     private function getScalar($sql, $params = []) {
@@ -76,19 +83,17 @@ class DashboardController {
             $stmt = $this->db->prepare($sql);
             $stmt->execute($params);
             $res = $stmt->fetchColumn();
-            return $res !== false ? $res : 0;
-        } catch (Exception $e) {
-            return 0;
-        }
+            return $res !== false ? (int)$res : 0;
+        } catch (Exception $e) { return 0; }
     }
 
     private function render($path, $data = []) {
         extract($data);
         ob_start();
-        if ($path && file_exists($path)) {
+        if (file_exists($path)) {
             include $path;
         } else {
-            echo "<div class='alert alert-danger'>HATA: Dosya bulunamadı! <br> Aranan Yol: $path</div>";
+            die("HATA: Görünüm dosyası bulunamadı! <br> Aranan Yol: $path");
         }
         $content = ob_get_clean();
         include dirname(__DIR__) . '/Views/layouts/admin_layout.php';

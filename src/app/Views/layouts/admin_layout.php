@@ -27,17 +27,14 @@
 <?php 
 // 1. Rolü ve ID'yi session'dan al
 $currentRole = strtolower(trim($_SESSION['role'] ?? 'guest')); 
-$roleId = intval($_SESSION['role_id'] ?? 0);
+$roleId = intval($_SESSION['role_id'] ?? $_SESSION['RoleID'] ?? 0);
 
-// 2. Yetki Kontrolleri (Azure ID'lerine göre güncellendi)
+// 2. Yetki Tanımları
 $isSystemAdmin = ($roleId === 1 || $currentRole === 'systemadmin');
 $isClubAdmin   = ($roleId === 2 || $currentRole === 'clubadmin');
 $isCoach       = ($roleId === 3 || $currentRole === 'coach' || $currentRole === 'trainer');
-$isParent      = ($roleId === 4 || $currentRole === 'parent');
 
-$selectedClubID = $_SESSION['selected_club_id'] ?? $_SESSION['club_id'] ?? null;
-
-// Kulüp içeriği gösterilsin mi?
+// Kulüp içeriği gösterilsin mi? (Admin veya Antrenörse)
 $showClubMenu = ($isClubAdmin || $isCoach || ($isSystemAdmin && isset($_SESSION['selected_club_id'])));
 
 // Navbar Başlığı
@@ -46,7 +43,7 @@ $displayClubName = $_SESSION['selected_club_name'] ?? $_SESSION['club_name'] ?? 
 
 <div id="wrapper">
     <div id="sidebar-wrapper">
-        <div class="sidebar-heading border-bottom">
+        <div class="sidebar-heading border-bottom text-center">
             <i class="fa-solid fa-medal me-2 text-warning"></i>SPOR CRM
         </div>
         
@@ -66,35 +63,37 @@ $displayClubName = $_SESSION['selected_club_name'] ?? $_SESSION['club_name'] ?? 
             <?php endif; ?>
 
             <?php if ($showClubMenu): ?>
-                <div class="menu-header">Kulüp İşlemleri</div>
+                <div class="menu-header"><?php echo $isCoach ? 'Eğitim Menüsü' : 'Kulüp İşlemleri'; ?></div>
                 
-                <?php if (!$isCoach): // Antrenörler diğer antrenörleri yönetemez ?>
-                <a href="index.php?page=coaches" class="list-group-item list-group-item-action">
-                    <i class="fa-solid fa-user-tie"></i> Antrenörler
-                </a>
+                <?php if (!$isCoach): ?>
+                    <a href="index.php?page=coaches" class="list-group-item list-group-item-action">
+                        <i class="fa-solid fa-user-tie"></i> Antrenörler
+                    </a>
                 <?php endif; ?>
 
                 <a href="index.php?page=students" class="list-group-item list-group-item-action">
-                    <i class="fa-solid fa-user-graduate me-2 text-warning"></i> Öğrenciler
+                    <i class="fa-solid fa-user-graduate me-2 text-warning"></i> 
+                    <?php echo $isCoach ? 'Öğrencilerim' : 'Öğrenciler'; ?>
                 </a>
 
                 <a href="index.php?page=groups" class="list-group-item list-group-item-action">
-                    <i class="fa-solid fa-people-group me-2 text-primary"></i> Gruplar / Dersler
+                    <i class="fa-solid fa-people-group me-2 text-primary"></i> 
+                    <?php echo $isCoach ? 'Gruplarım' : 'Gruplar / Dersler'; ?>
                 </a>
 
                 <a href="index.php?page=attendance" class="list-group-item list-group-item-action">
-                    <i class="fa-solid fa-calendar-check me-2 text-info"></i> Günlük Yoklama
+                    <i class="fa-solid fa-calendar-check me-2 text-info"></i> Yoklama Al
                 </a>
                            
                 <a class="list-group-item list-group-item-action" href="index.php?page=training_groups">
-                    <i class="fa-solid fa-calendar-check me-2"></i> Antrenman Takvimi
+                    <i class="fa-solid fa-calendar-days me-2"></i> Çalışma Takvimi
                 </a>
           
-                <?php if (!$isCoach): // Antrenörler finans göremez ?>
-                <div class="menu-header">Finansal Takip</div>
-                <a href="index.php?page=club_finance" class="list-group-item list-group-item-action">
-                    <i class="fa-solid fa-money-bill-transfer me-2 text-success"></i> Aidat Takibi
-                </a>
+                <?php if (!$isCoach): ?>
+                    <div class="menu-header">Finansal Takip</div>
+                    <a href="index.php?page=club_finance" class="list-group-item list-group-item-action">
+                        <i class="fa-solid fa-money-bill-transfer me-2 text-success"></i> Aidat Takibi
+                    </a>
                 <?php endif; ?>
 
             <?php endif; ?>
@@ -112,18 +111,19 @@ $displayClubName = $_SESSION['selected_club_name'] ?? $_SESSION['club_name'] ?? 
             </div>
             <div class="d-flex align-items-center">
                 <div class="text-end me-3">
-                    <div class="fw-bold small text-dark"><?php echo $_SESSION['name'] ?? 'Kullanıcı'; ?></div>
+                    <div class="fw-bold small text-dark"><?php echo htmlspecialchars($_SESSION['name'] ?? 'Kullanıcı'); ?></div>
                     <div class="text-muted small" style="font-size: 0.7rem;">
                         <?php 
                             if ($isSystemAdmin) echo 'Sistem Yöneticisi';
                             elseif ($isClubAdmin) echo 'Kulüp Yöneticisi';
                             elseif ($isCoach) echo 'Antrenör';
-                            elseif ($isParent) echo 'Veli';
-                            else echo htmlspecialchars($_SESSION['role'] ?? '');
+                            else echo 'Kullanıcı';
                         ?>
                     </div>
                 </div>
-                <i class="fa-solid fa-circle-user fa-2xl text-secondary"></i>
+                <div class="bg-light p-2 rounded-circle border">
+                    <i class="fa-solid fa-user-tie fa-lg text-secondary"></i>
+                </div>
             </div>
         </nav>
 

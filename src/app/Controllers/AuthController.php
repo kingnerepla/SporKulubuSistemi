@@ -1,6 +1,8 @@
 <?php
+
 class AuthController {
     private $db;
+
     public function __construct() {
         $this->db = (new Database())->getConnection();
     }
@@ -11,6 +13,7 @@ class AuthController {
             $password = trim($_POST['password'] ?? '');
     
             try {
+                // Azure SQL üzerinde büyük/küçük harf duyarlılığına karşı IsActive kontrolü ile çekiyoruz
                 $sql = "SELECT * FROM Users WHERE Email = ? AND IsActive = 1";
                 $stmt = $this->db->prepare($sql);
                 $stmt->execute([$email]);
@@ -19,19 +22,27 @@ class AuthController {
                 if ($user) {
                     $dbPass = isset($user['PasswordHash']) ? trim($user['PasswordHash']) : null;
     
+                    // Şifre doğrulama (Hem düz metin hem hash desteği)
                     if ($dbPass && ($password === $dbPass || password_verify($password, $dbPass))) {
                         
-                        if (session_status() === PHP_SESSION_NONE) session_start();
+                        if (session_status() === PHP_SESSION_NONE) {
+                            session_start();
+                        }
                         
-                        // 1. Ana veriler
+                        // 1. Temel Kullanıcı Bilgileri
                         $_SESSION['user_id']   = $user['UserID']; 
                         $_SESSION['user_name'] = $user['FullName'];
-                        
-                        // 2. Rol belirleme (Azure: 3 = Coach)
-                        $_SESSION['role'] = $this->detectRole($user); 
+                        $_SESSION['name']      = $user['FullName'] ?? 'Kullanıcı';
+                        $_SESSION['club_id']   = $user['ClubID'] ?? null;
 
-                        // 3. Session set etme
-                        $this->setSession($user);
+                        // 2. Rol Belirleme (Kritik: Hem string hem ID olarak kaydediyoruz)
+                        $detectedRole = $this->detectRole($user);
+                        $_SESSION['role'] = $detectedRole;
+                        $_SESSION['role_id'] = intval($user['RoleID'] ?? 0);
+                        $_SESSION['RoleID']  = intval($user['RoleID'] ?? 0); // Yedek (Büyük harf kullanan yerler için)
+
+                        // 3. Yetkileri Set Etme
+                        $this->setSessionPermissions($detectedRole);
     
                         session_write_close();
                         header("Location: index.php?page=dashboard");
@@ -39,7 +50,8 @@ class AuthController {
                     }
                 }
             } catch (Exception $e) {
-                die("Sorgu Hatası: " . $e->getMessage());
+                error_log("Login Hatası: " . $e->getMessage());
+                die("Sistemde bir hata oluştu. Lütfen daha sonra tekrar deneyiniz.");
             }
     
             header("Location: index.php?page=admin_login_form&error=credentials");
@@ -52,23 +64,16 @@ class AuthController {
         switch ($roleId) {
             case 1:  return 'systemadmin';
             case 2:  return 'clubadmin';
-            case 3:  return 'coach';      // Azure Trainer -> Coach
+            case 3:  return 'coach';      // Antrenör
             case 4:  return 'parent';
             case 5:  return 'student';
             default: return 'guest';
         }
     }
     
-    // TEK VE BİRLEŞTİRİLMİŞ FONKSİYON
-    private function setSession($data) {
-        // Layout'un beklediği tüm varyasyonları ekliyoruz
-        $_SESSION['name']      = $data['FullName'] ?? 'Kullanıcı';
-        $_SESSION['club_id']   = $data['ClubID'] ?? null;
-        $_SESSION['RoleID']    = intval($data['RoleID'] ?? 0);
-        $_SESSION['role_id']   = intval($data['RoleID'] ?? 0);
-        
-        // Finansal yetki kontrolü
-        if ($_SESSION['role'] === 'systemadmin' || $_SESSION['role'] === 'clubadmin') {
+    private function setSessionPermissions($role) {
+        // Finansal yetki veya diğer modül izinleri
+        if ($role === 'systemadmin' || $role === 'clubadmin') {
             $_SESSION['can_view_finance'] = true;
         } else {
             $_SESSION['can_view_finance'] = false;
@@ -95,5 +100,13 @@ class AuthController {
                 die("<b>Dosya Hatası:</b> Login formu bulunamadı.");
             }
         }
+    }
+
+    public function logout() {
+        if (session_status() === PHP_SESSION_NONE) session_start();
+        session_unset();
+        session_destroy();
+        header("Location: index.php?page=admin_login_form");
+        exit;
     }
 }
