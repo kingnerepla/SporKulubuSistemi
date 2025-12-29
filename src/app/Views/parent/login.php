@@ -23,7 +23,6 @@
     <?php if(isset($_GET['error'])): ?>
         <div class="alert alert-danger small py-2 text-center">Giriş bilgileri hatalı!</div>
     <?php endif; ?>
-
     <form action="index.php?page=parent_auth" method="POST">
         <div class="mb-3">
             <label class="form-label small fw-bold">Kayıtlı Telefon Numarası</label>

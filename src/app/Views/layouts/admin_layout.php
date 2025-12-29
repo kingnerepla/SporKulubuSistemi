@@ -50,18 +50,7 @@ $displayClubName = $_SESSION['selected_club_name'] ?? $_SESSION['club_name'] ?? 
             <a href="index.php?page=dashboard" class="list-group-item list-group-item-action">
                 <i class="fa-solid fa-house me-2"></i> Dashboard
             </a>
-            <div class="admin-header d-flex justify-content-between align-items-center p-3 bg-white shadow-sm">
-                <h4>Yönetim Paneli</h4>
-                <div class="user-info">
-                    <span class="me-3 fw-bold"><?= $_SESSION['user_name'] ?? 'Yönetici' ?></span>
-                    
-                    <a href="index.php?page=profile" class="btn btn-sm btn-outline-primary me-2">
-                        <i class="fa-solid fa-id-card"></i> Ayarlar
-                    </a>
-                    
-                    <a href="index.php?page=logout" class="btn btn-sm btn-danger">Çıkış</a>
-                </div>
-            </div>
+
             <?php if ($isSystemAdmin): ?>
                 <div class="menu-header">Sistem Sahibi</div>
                 <a href="index.php?page=clubs" class="list-group-item list-group-item-action">

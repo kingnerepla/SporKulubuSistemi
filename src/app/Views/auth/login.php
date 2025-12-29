@@ -19,8 +19,11 @@
             <h4 class="fw-bold">Spor CRM Giriş</h4>
             <p class="text-muted small">Lütfen bilgilerinizi giriniz</p>
         </div>
-
-        <form action="index.php?page=auth_check" method="POST">
+        <?php if(isset($_GET['error'])): ?>
+            <div class="alert alert-danger">Giriş bilgileri hatalı!</div>
+        <?php endif; ?>
+        
+        <form action="index.php?page=admin_auth" method="POST">
             <div class="mb-3">
                 <label class="form-label small fw-bold">E-posta Adresi</label>
                 <div class="input-group">

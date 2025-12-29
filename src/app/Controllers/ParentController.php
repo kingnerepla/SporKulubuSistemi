@@ -60,6 +60,16 @@ class ParentController {
         include __DIR__ . '/../Views/parent/parent_dashboard.php';
     }
     public function authenticate() {
+        // app/Controllers/ParentController.php -> authenticate metodu içi
+        if ($isValid) {
+            $_SESSION['parent_logged_in'] = true; // index.php'nin beklediği anahtar
+            $_SESSION['student_id'] = $student['StudentID'];
+            $_SESSION['student_name'] = $student['FullName'];
+            
+            session_write_close();
+            header("Location: index.php?page=parent_dashboard");
+            exit;
+        }
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $phone = trim($_POST['phone']);
             $password = trim($_POST['password']);
@@ -70,6 +80,7 @@ class ParentController {
             $student = $stmt->fetch(PDO::FETCH_ASSOC);
     
             // Şifre kontrolü (Eğer hash kullanmıyorsak direkt karşılaştırma)
+            
             if ($student && $student['Password'] == $password) {
                 $_SESSION['parent_logged_in'] = true;
                 $_SESSION['student_id'] = $student['StudentID'];

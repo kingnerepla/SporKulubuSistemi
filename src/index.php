@@ -1,31 +1,22 @@
 <?php
-// index.php 
 ob_start();
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Hata vermemesi için kontrol ekleyelim
-$userId = $_SESSION['user_id'] ?? null; 
-// echo "ID: " . $userId; // Testten sonra bunu kapatabilirsin
-$page = $_GET['page'] ?? 'login';
-
-// Eğer giriş yapılmamışsa ve gidilmek istenen sayfa "kamu" sayfası değilse...
-if (!in_array($page, ['login', 'admin_login_form', 'parent_login', 'admin_auth', 'parent_auth'])) {
-    if (!isset($_SESSION['user_id']) && !isset($_SESSION['parent_logged_in'])) {
-        // ...onu seçim sayfasına zorla gönder!
-        header("Location: index.php?page=login"); 
-        exit;
-    }
-}
-
-// 1. Veritabanı Yolu: index.php ile aynı yerdeki app/config/Database.php
+// 1. Veritabanı Yolu (index.php zaten src içinde, o yüzden direkt app/config...)
 $dbPath = __DIR__ . '/app/config/Database.php';
 
 if (file_exists($dbPath)) {
     require_once $dbPath;
 } else {
-    die("Kritik Hata: Database.php bulunamadı. <br> Aranan yol: " . $dbPath);
+    // Eğer yukarıdaki olmazsa alternatif (üst dizine bak)
+    $dbPath = dirname(__DIR__) . '/src/app/config/Database.php';
+    if (file_exists($dbPath)) {
+        require_once $dbPath;
+    } else {
+        die("Kritik Hata: Database.php bulunamadı.");
+    }
 }
 
 $page = $_GET['page'] ?? 'login';
@@ -33,6 +24,7 @@ $page = $_GET['page'] ?? 'login';
 // 2. Herkese açık sayfalar
 $public_pages = ['login', 'admin_login_form', 'parent_login', 'admin_auth', 'parent_auth'];
 
+// 3. Yetki Kontrolü
 if (!in_array($page, $public_pages)) {
     if (strpos($page, 'parent_') === 0) {
         if (!isset($_SESSION['parent_logged_in'])) {
@@ -47,9 +39,9 @@ if (!in_array($page, $public_pages)) {
     }
 }
 
-// 3. Dinamik Controller Yükleyici
+// 4. Dinamik Controller Yükleyici (SRC DUYARLI)
 function safe_load($controllerName, $methodName) {
-    // index.php zaten src içinde olduğu için yol: app/Controllers/...
+    // index.php /var/www/html/src içinde olduğu için:
     $path = __DIR__ . "/app/Controllers/{$controllerName}.php";
     
     if (file_exists($path)) {
@@ -59,33 +51,44 @@ function safe_load($controllerName, $methodName) {
             if (method_exists($controller, $methodName)) {
                 $controller->$methodName();
             } else {
-                die("Hata: " . $controllerName . " sınıfı içinde " . $methodName . " metodu bulunamadı.");
+                die("<b>Metot Hatası:</b> {$controllerName} içinde '{$methodName}' bulunamadı.");
             }
         } else {
-            die("Hata: " . $controllerName . " sınıfı bulunamadı.");
+            die("<b>Sınıf Hatası:</b> '{$controllerName}' sınıfı bulunamadı.");
         }
     } else {
-        die("Hata: " . $controllerName . " dosyası bulunamadı. <br> Aranan Yol: " . $path);
+        // HATA BURADAYDI: Yolu tam göstererek debug yapıyoruz
+        die("<b>Dosya Hatası:</b> {$controllerName}.php bulunamadı.<br>Sistem şu klasöre bakıyor: <code>$path</code>");
     }
 }
 
-// 4. Rota Yönetimi
+// 5. Rota Yönetimi
 switch ($page) {
     case 'login':            safe_load('AuthController', 'showSelection'); break;
     case 'admin_login_form': safe_load('AuthController', 'showAdminLogin'); break;
     case 'parent_login':     safe_load('ParentController', 'loginPage'); break;
     case 'admin_auth':       safe_load('AuthController', 'login');  break;
     case 'parent_auth':      safe_load('ParentController', 'authenticate'); break;
-    case 'parent_dashboard': safe_load('ParentController', 'dashboard'); break;
-    case 'logout':           session_destroy(); header("Location: index.php?page=login"); exit;
-    case 'profile':        safe_load('ProfileController', 'index'); break;
-    case 'profile_update': safe_load('ProfileController', 'update'); break;
+    
+    // KULÜP VE FİNANS
+    case 'club_management':  safe_load('AdminController', 'manageClubs'); break;
+    case 'system_finance':   safe_load('AdminController', 'systemFinance'); break;
+    case 'club_details':     safe_load('AdminController', 'clubDetails'); break;
+    
     case 'dashboard':        safe_load('DashboardController', 'index'); break;
+    case 'parent_dashboard': safe_load('ParentController', 'dashboard'); break;
+    case 'profile':          safe_load('ProfileController', 'index'); break;
+    case 'profile_update':   safe_load('ProfileController', 'update'); break;
     case 'training_groups':  safe_load('GroupScheduleController', 'trainingGroups'); break;
     case 'group_calendar':   safe_load('GroupScheduleController', 'groupCalendar'); break;
 
+    case 'logout':           
+        session_destroy(); 
+        header("Location: index.php?page=login"); 
+        exit;
+
     default:                
-        header("Location: index.php?page=dashboard"); 
+        header("Location: index.php?page=dashboard");
         break;
 }
 
