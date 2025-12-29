@@ -25,16 +25,20 @@
 <body>
 
 <?php 
-// 1. Rolü normalize et (Küçük harf ve temiz veri)
+// 1. Rolü ve ID'yi session'dan al
 $currentRole = strtolower(trim($_SESSION['role'] ?? 'guest')); 
+$roleId = intval($_SESSION['role_id'] ?? 0);
 
-// 2. Yetki Kontrolleri
-$isSystemAdmin = ($currentRole === 'systemadmin' || $currentRole === 'admin');
-$isClubAdmin   = ($currentRole === 'clubadmin' || $currentRole === 'manager');
+// 2. Yetki Kontrolleri (Azure ID'lerine göre güncellendi)
+$isSystemAdmin = ($roleId === 1 || $currentRole === 'systemadmin');
+$isClubAdmin   = ($roleId === 2 || $currentRole === 'clubadmin');
+$isCoach       = ($roleId === 3 || $currentRole === 'coach' || $currentRole === 'trainer');
+$isParent      = ($roleId === 4 || $currentRole === 'parent');
+
 $selectedClubID = $_SESSION['selected_club_id'] ?? $_SESSION['club_id'] ?? null;
 
-// Kulüp içeriği gösterilsin mi? (Kulüp Adminiyse VEYA Süper Admin bir kulüp seçmişse)
-$showClubMenu = ($isClubAdmin || ($isSystemAdmin && isset($_SESSION['selected_club_id'])));
+// Kulüp içeriği gösterilsin mi?
+$showClubMenu = ($isClubAdmin || $isCoach || ($isSystemAdmin && isset($_SESSION['selected_club_id'])));
 
 // Navbar Başlığı
 $displayClubName = $_SESSION['selected_club_name'] ?? $_SESSION['club_name'] ?? 'Sistem Paneli';
@@ -64,6 +68,12 @@ $displayClubName = $_SESSION['selected_club_name'] ?? $_SESSION['club_name'] ?? 
             <?php if ($showClubMenu): ?>
                 <div class="menu-header">Kulüp İşlemleri</div>
                 
+                <?php if (!$isCoach): // Antrenörler diğer antrenörleri yönetemez ?>
+                <a href="index.php?page=coaches" class="list-group-item list-group-item-action">
+                    <i class="fa-solid fa-user-tie"></i> Antrenörler
+                </a>
+                <?php endif; ?>
+
                 <a href="index.php?page=students" class="list-group-item list-group-item-action">
                     <i class="fa-solid fa-user-graduate me-2 text-warning"></i> Öğrenciler
                 </a>
@@ -76,17 +86,17 @@ $displayClubName = $_SESSION['selected_club_name'] ?? $_SESSION['club_name'] ?? 
                     <i class="fa-solid fa-calendar-check me-2 text-info"></i> Günlük Yoklama
                 </a>
                            
-                <li class="nav-item">
-                    <a class="list-group-item list-group-item-action" href="index.php?page=training_groups">
-                        <i class="fa-solid fa-calendar-check me-2"></i> Antrenman Takvimi
-                    </a>
-                </li>
+                <a class="list-group-item list-group-item-action" href="index.php?page=training_groups">
+                    <i class="fa-solid fa-calendar-check me-2"></i> Antrenman Takvimi
+                </a>
           
+                <?php if (!$isCoach): // Antrenörler finans göremez ?>
                 <div class="menu-header">Finansal Takip</div>
-
                 <a href="index.php?page=club_finance" class="list-group-item list-group-item-action">
                     <i class="fa-solid fa-money-bill-transfer me-2 text-success"></i> Aidat Takibi
                 </a>
+                <?php endif; ?>
+
             <?php endif; ?>
 
             <a href="index.php?page=logout" class="list-group-item list-group-item-action text-danger mt-5 border-top border-secondary">
@@ -103,7 +113,15 @@ $displayClubName = $_SESSION['selected_club_name'] ?? $_SESSION['club_name'] ?? 
             <div class="d-flex align-items-center">
                 <div class="text-end me-3">
                     <div class="fw-bold small text-dark"><?php echo $_SESSION['name'] ?? 'Kullanıcı'; ?></div>
-                    <div class="text-muted small" style="font-size: 0.7rem;"><?php echo $_SESSION['role'] ?? ''; ?></div>
+                    <div class="text-muted small" style="font-size: 0.7rem;">
+                        <?php 
+                            if ($isSystemAdmin) echo 'Sistem Yöneticisi';
+                            elseif ($isClubAdmin) echo 'Kulüp Yöneticisi';
+                            elseif ($isCoach) echo 'Antrenör';
+                            elseif ($isParent) echo 'Veli';
+                            else echo htmlspecialchars($_SESSION['role'] ?? '');
+                        ?>
+                    </div>
                 </div>
                 <i class="fa-solid fa-circle-user fa-2xl text-secondary"></i>
             </div>

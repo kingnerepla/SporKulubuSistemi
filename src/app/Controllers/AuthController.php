@@ -21,18 +21,16 @@ class AuthController {
     
                     if ($dbPass && ($password === $dbPass || password_verify($password, $dbPass))) {
                         
-                        // Önce tüm session'ı temizle
                         if (session_status() === PHP_SESSION_NONE) session_start();
                         
-                        // --- OTURUMU BAŞLAT ---
-                        // 1. Ana veriler (Layout'un en çok kullandığı anahtarlar)
+                        // 1. Ana veriler
                         $_SESSION['user_id']   = $user['UserID']; 
-                        $_SESSION['user_name'] = $user['FullName']; // Ekranda ismi bu basar
+                        $_SESSION['user_name'] = $user['FullName'];
                         
-                        // 2. Rol belirleme (Sidebar menüleri için)
+                        // 2. Rol belirleme (Azure: 3 = Coach)
                         $_SESSION['role'] = $this->detectRole($user); 
 
-                        // 3. Detaylı session verileri (Bypass edilen yerleri burası doldurur)
+                        // 3. Session set etme
                         $this->setSession($user);
     
                         session_write_close();
@@ -54,48 +52,47 @@ class AuthController {
         switch ($roleId) {
             case 1:  return 'systemadmin';
             case 2:  return 'clubadmin';
+            case 3:  return 'coach';      // Azure Trainer -> Coach
             case 4:  return 'parent';
-            default: return 'trainer';
+            case 5:  return 'student';
+            default: return 'guest';
         }
     }
-
+    
+    // TEK VE BİRLEŞTİRİLMİŞ FONKSİYON
     private function setSession($data) {
-        // SQL Server anahtarlarını normalize et
-        $userData = array_change_key_case($data, CASE_LOWER);
-        
-        // Eğer layout 'user_name' değil de 'name' veya 'fullname' bekliyorsa bunları da ekleyelim
+        // Layout'un beklediği tüm varyasyonları ekliyoruz
         $_SESSION['name']      = $data['FullName'] ?? 'Kullanıcı';
         $_SESSION['club_id']   = $data['ClubID'] ?? null;
-        $_SESSION['RoleID']    = $data['RoleID'] ?? 0;
+        $_SESSION['RoleID']    = intval($data['RoleID'] ?? 0);
+        $_SESSION['role_id']   = intval($data['RoleID'] ?? 0);
         
-        // Finansal yetkiler için ek kontroller
-        if ($_SESSION['role'] === 'systemadmin') {
+        // Finansal yetki kontrolü
+        if ($_SESSION['role'] === 'systemadmin' || $_SESSION['role'] === 'clubadmin') {
             $_SESSION['can_view_finance'] = true;
+        } else {
+            $_SESSION['can_view_finance'] = false;
         }
     }
 
     public function showSelection() {
-        // SRC yapısına duyarlı yol tespiti
         $path = dirname(__DIR__) . '/Views/auth/select.php';
         if (!file_exists($path)) {
-            $path = dirname(__DIR__) . '/Views/admin/select.php'; // Alternatif
+            $path = dirname(__DIR__) . '/Views/admin/select.php';
         }
         include $path;
     }
     
     public function showAdminLogin() {
-        // En sağlıklı yol dirname(__DIR__) kullanımıdır
         $path = dirname(__DIR__) . '/Views/auth/login.php';
-    
         if (file_exists($path)) {
             include $path;
         } else {
-            // Eğer dosya auth içinde değilse admin klasörüne bak
             $manualPath = dirname(__DIR__) . '/Views/admin/login.php';
             if (file_exists($manualPath)) {
                 include $manualPath;
             } else {
-                die("<b>Dosya Hatası:</b> Login formu bulunamadı.<br>Yol: $path");
+                die("<b>Dosya Hatası:</b> Login formu bulunamadı.");
             }
         }
     }

@@ -103,6 +103,7 @@ function safe_load($controllerName, $methodName) {
         case 'students':         safe_load('StudentController', 'index'); break;
         case 'student_add':      safe_load('StudentController', 'create'); break;
         case 'student_edit':     safe_load('StudentController', 'edit'); break;
+        case 'student_update': safe_load('StudentController', 'update'); break;
         case 'student_detail':   safe_load('StudentController', 'view'); break;
         case 'student_store': safe_load('StudentController', 'store'); break;
         case 'student_delete': safe_load('StudentController', 'delete'); break;
@@ -124,7 +125,13 @@ function safe_load($controllerName, $methodName) {
         // Program/Takvim Butonu (GroupScheduleController)
         case 'schedule':         safe_load('GroupScheduleController', 'index'); break;
         case 'program':          safe_load('GroupScheduleController', 'trainingGroups'); break;
-        
+        // Antrenör Yönetimi
+        case 'coaches': safe_load('CoachController', 'index'); break;
+        case 'coach_add': safe_load('CoachController', 'add'); break;
+        case 'coach_save': safe_load('CoachController', 'store'); break;
+        case 'coach_delete': safe_load('CoachController', 'delete'); break;
+        case 'coach_update': safe_load('CoachController', 'update'); break;
+        case 'group_update': safe_load('GroupController', 'update'); break;
         // Günlük Yoklama (AttendanceController)
   
         case 'daily_attendance': safe_load('AttendanceController', 'index'); break;

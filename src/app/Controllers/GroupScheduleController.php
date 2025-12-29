@@ -7,29 +7,7 @@ class GroupScheduleController {
         $this->db = (new Database())->getConnection(); 
     }
 
-    // Program Düzenleme Ekranı
-    public function edit() {
-        $groupId = $_GET['id'];
-        
-        $stmt = $this->db->prepare("SELECT * FROM GroupSchedules WHERE GroupID = ?");
-        $stmt->execute([$groupId]);
-        $schedules = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        $this->render('group_schedule_edit', ['groupId' => $groupId, 'schedules' => $schedules]);
-    }
-
-    // Tüm Antrenmanları Listele
-    public function sessions() {
-        $clubId = $_SESSION['club_id'] ?? $_SESSION['selected_club_id'];
-        $groupId = $_GET['group_id'] ?? null;
-        $sql = "SELECT ts.*, g.GroupName FROM TrainingSessions ts JOIN Groups g ON ts.GroupID = g.GroupID WHERE ts.ClubID = ? " . ($groupId ? "AND ts.GroupID = ?" : "") . " ORDER BY ts.TrainingDate DESC, ts.StartTime ASC";
-        $stmt = $this->db->prepare($sql);
-        $params = $groupId ? [$clubId, $groupId] : [$clubId];
-        $stmt->execute($params);
-        $sessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        $this->render('training_sessions_list', ['sessions' => $sessions]);
-    }
-
-    // Grupları Listele
+    // 1. Grupları Listele (Hata aldığın metot burasıydı, geri eklendi)
     public function trainingGroups() {
         $clubId = $_SESSION['club_id'] ?? $_SESSION['selected_club_id'];
         $stmt = $this->db->prepare("SELECT * FROM Groups WHERE ClubID = ?");
@@ -38,9 +16,9 @@ class GroupScheduleController {
         $this->render('training_groups_list', ['groups' => $groups]);
     }
 
-    // Grup Takvimi
+    // 2. Grup Takvimi (Detay Görünümü)
     public function groupCalendar() {
-        $groupId = $_GET['id'];
+        $groupId = $_GET['id'] ?? 0;
         $stmtG = $this->db->prepare("SELECT GroupName FROM Groups WHERE GroupID = ?");
         $stmtG->execute([$groupId]);
         $group = $stmtG->fetch(PDO::FETCH_ASSOC);
@@ -52,7 +30,40 @@ class GroupScheduleController {
         $this->render('group_calendar', ['group' => $group, 'sessions' => $sessions, 'groupId' => $groupId]);
     }
 
-    // TEKLİ SİLME
+    // 3. Durum Güncelleme (Dashboard'a fırlatmayı engelleyen güvenli sürüm)
+    public function updateSessionStatus() {
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $sessionId = $_POST['session_id'] ?? null;
+            $status    = $_POST['status'] ?? null;
+            $note      = $_POST['note'] ?? null;
+            $groupId   = $_POST['group_id'] ?? $_GET['group_id'] ?? null;
+    
+            if (!$sessionId) {
+                header("Location: index.php?page=dashboard");
+                exit;
+            }
+    
+            try {
+                // Azure SQL için güvenli güncelleme
+                $sql = "UPDATE [dbo].[TrainingSessions] SET [Status] = ?, [Note] = ? WHERE [SessionID] = ?";
+                $this->db->prepare($sql)->execute([$status, $note, $sessionId]);
+    
+                // Geri dönüş yolu kontrolü
+                if (!$groupId) {
+                    $check = $this->db->prepare("SELECT GroupID FROM [dbo].[TrainingSessions] WHERE [SessionID] = ?");
+                    $check->execute([$sessionId]);
+                    $groupId = $check->fetchColumn();
+                }
+    
+                header("Location: index.php?page=group_calendar&id=" . $groupId . "&msg=updated");
+                exit;
+            } catch (Exception $e) {
+                die("Güncelleme Hatası: " . $e->getMessage());
+            }
+        }
+    }
+
+    // 4. Tekli Antrenman Silme (Kolon hataları temizlendi)
     public function deleteSingleSession() {
         $sessionId = $_GET['id'] ?? null;
         $groupId = $_GET['group_id'] ?? null;
@@ -64,72 +75,25 @@ class GroupScheduleController {
     
         try {
             $this->db->beginTransaction();
+            // Yoklama tablosu bağımlılığını temizle (Hata alsa bile devam et)
+            try {
+                $this->db->prepare("DELETE FROM [dbo].[Attendance] WHERE [SessionID] = ? OR [TrainingSessionID] = ?")->execute([$sessionId, $sessionId]);
+            } catch (Exception $e) {}
     
-            // Önce varsa yoklama kayıtlarını sil (Yabancı anahtar hatasını önlemek için)
-            $stmt1 = $this->db->prepare("DELETE FROM [dbo].[Attendance] WHERE [SessionID] = ?");
-            $stmt1->execute([$sessionId]);
-    
-            // Sonra antrenmanı sil
+            // Seansı sil
             $stmt2 = $this->db->prepare("DELETE FROM [dbo].[TrainingSessions] WHERE [SessionID] = ?");
             $stmt2->execute([$sessionId]);
     
             $this->db->commit();
             header("Location: index.php?page=group_calendar&id=$groupId&msg=deleted");
             exit;
-    
         } catch (Exception $e) {
-            if ($this->db->inTransaction()) {
-                $this->db->rollBack();
-            }
+            if ($this->db->inTransaction()) $this->db->rollBack();
             die("Silme Hatası: " . $e->getMessage());
         }
     }
 
-    // DURUM GÜNCELLEME (Düzeltildi)
-    public function updateSessionStatus() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            // Formdan gelen verileri al
-            $sessionId = $_POST['session_id'] ?? null;
-            $status    = $_POST['status'] ?? null;
-            $note      = $_POST['note'] ?? null;
-            
-            // Grup ID'sini hem POST hem GET hem de REQUEST içinden kovalıyoruz
-            $groupId   = $_POST['group_id'] ?? $_GET['group_id'] ?? $_REQUEST['group_id'] ?? null;
-    
-            if (!$sessionId) {
-                header("Location: index.php?page=dashboard&error=missing_id");
-                exit;
-            }
-    
-            try {
-                // 1. Durumu Güncelle (Kolon isimlerini [] içine alarak Azure'u zorluyoruz)
-                $sql = "UPDATE [dbo].[TrainingSessions] 
-                        SET [Status] = ?, [Note] = ? 
-                        WHERE [SessionID] = ?";
-                
-                $stmt = $this->db->prepare($sql);
-                $stmt->execute([$status, $note, $sessionId]);
-    
-                // 2. Yönlendirme Güvenliği: Eğer hala groupId yoksa veritabanından seansın grubunu bul
-                if (!$groupId || $groupId == 0) {
-                    $check = $this->db->prepare("SELECT GroupID FROM [dbo].[TrainingSessions] WHERE [SessionID] = ?");
-                    $check->execute([$sessionId]);
-                    $groupId = $check->fetchColumn();
-                }
-    
-                // 3. KESİN YÖNLENDİRME (URL'yi manuel inşa ediyoruz)
-                $finalUrl = "index.php?page=group_calendar&id=" . (int)$groupId . "&msg=updated";
-                header("Location: " . $finalUrl);
-                exit; // PHP'nin başka bir yere sapmasını engeller
-    
-            } catch (Exception $e) {
-                // Hata olursa Dashboard'a atma, hatayı bas ki görelim
-                die("SQL HATASI: " . $e->getMessage());
-            }
-        }
-    }
-
-    // ŞABLON KAYDET
+    // 5. Antrenman Şablonunu Kaydet
     public function save() {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $groupId = $_POST['group_id'];
@@ -147,15 +111,13 @@ class GroupScheduleController {
                 header("Location: index.php?page=group_schedule&id=$groupId&success=template_saved");
                 exit;
             } catch (Exception $e) {
-                if ($this->db->inTransaction()) {
-                    $this->db->rollBack();
-                }
-                die("Hata: " . $e->getMessage());
+                if ($this->db->inTransaction()) $this->db->rollBack();
+                die("Şablon Hatası: " . $e->getMessage());
             }
         }
     }
 
-    // ANTRENMANLARI OTOMATİK OLUŞTUR
+    // 6. Otomatik Antrenman Oluşturma (Generate)
     public function generateSessions() {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') return;
         $groupId = $_POST['group_id'];
@@ -171,7 +133,7 @@ class GroupScheduleController {
         $last = new DateTime($endDate);
         $last->modify('+1 day');
 
-        $ins = $this->db->prepare("INSERT INTO TrainingSessions (GroupID, ClubID, TrainingDate, StartTime, EndTime, Status) VALUES (?, ?, ?, ?, ?, 'Scheduled')");
+        $ins = $this->db->prepare("INSERT INTO [dbo].[TrainingSessions] (GroupID, ClubID, TrainingDate, StartTime, EndTime, Status) VALUES (?, ?, ?, ?, ?, 'Scheduled')");
         while ($current < $last) {
             $dayOfWeek = $current->format('N'); 
             foreach ($schedules as $sch) {
@@ -185,14 +147,11 @@ class GroupScheduleController {
         exit;
     }
 
+    // 7. Render (Görünüm Yükleyici)
     private function render($view, $data = []) {
         extract($data); ob_start();
         $viewPath = __DIR__ . "/../Views/admin/{$view}.php";
-        if (file_exists($viewPath)) {
-            include $viewPath;
-        } else {
-            echo "Görünüm dosyası bulunamadı: $view";
-        }
+        if (file_exists($viewPath)) { include $viewPath; }
         $content = ob_get_clean();
         include __DIR__ . '/../Views/layouts/admin_layout.php';
     }
