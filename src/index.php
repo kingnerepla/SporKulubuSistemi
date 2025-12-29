@@ -73,7 +73,8 @@ function safe_load($controllerName, $methodName) {
         // --- YOKLAMA VE KATILIM (AttendanceController) ---
         case 'attendance':      safe_load('AttendanceController', 'index'); break;
         case 'attendance_save': safe_load('AttendanceController', 'save'); break;
-        
+        case 'delete_sessions': safe_load('GroupScheduleController', 'deleteSessions'); break;
+        case 'delete_single_session': safe_load('GroupScheduleController', 'deleteSingleSession'); break;
         // --- KULÜP YÖNETİMİ (ClubController) ---
         case 'club_management':  safe_load('ClubController', 'index'); break;
         case 'club_details':     safe_load('ClubController', 'details'); break;
@@ -117,8 +118,8 @@ function safe_load($controllerName, $methodName) {
         
         // Gruplar ve Dersler (GroupController)
         case 'groups':           safe_load('GroupController', 'index'); break;
-        case 'lessons':          safe_load('GroupController', 'lessons'); break; // Eğer dersler ayrı bir metodsa
-        
+        case 'lessons':          safe_load('GroupController', 'lessons'); break; // Eğer dersler ayrı bir metodsa// index.php içindeki switch($page) bloğuna ekle:
+        case 'delete_single_session': safe_load('GroupScheduleController', 'deleteSingleSession'); break;
         case 'parent_login':     safe_load('ParentController', 'loginPage'); break;
         // Program/Takvim Butonu (GroupScheduleController)
         case 'schedule':         safe_load('GroupScheduleController', 'index'); break;

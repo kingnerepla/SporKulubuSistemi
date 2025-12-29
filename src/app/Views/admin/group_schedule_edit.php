@@ -88,7 +88,45 @@
                         <i class="fa-solid fa-wand-magic-sparkles me-2"></i>Antrenmanları Oluştur
                     </button>
                 </form>
+                
             </div>
+            <div class="mt-5 pt-4 border-top">
+    <div class="d-flex align-items-center mb-3 text-danger">
+        <i class="fa-solid fa-trash-can fs-5 me-2"></i>
+        <h6 class="mb-0 fw-bold">Hatalı Kayıtları Temizle</h6>
+    </div>
+    
+    <div class="p-3 bg-light rounded-3 border border-danger border-opacity-25">
+        <p class="text-muted small mb-3">
+            Yanlış oluşturulan antrenmanları tarih aralığı seçerek bu gruptan <strong>toplu silebilirsiniz</strong>.
+        </p>
+        
+        <form action="index.php?page=delete_sessions" method="POST" onsubmit="return confirm('DİKKAT! Seçtiğiniz tarihler arasındaki tüm antrenmanlar kalıcı olarak silinecek. Emin misiniz?')">
+            <input type="hidden" name="group_id" value="<?= $groupId ?>">
+            
+            <div class="row g-2">
+                <div class="col-6">
+                    <label class="form-label small fw-bold">Başlangıç</label>
+                    <input type="date" name="start_date" class="form-control form-control-sm border-danger-subtle" required>
+                </div>
+                <div class="col-6">
+                    <label class="form-label small fw-bold">Bitiş</label>
+                    <input type="date" name="end_date" class="form-control form-control-sm border-danger-subtle" required>
+                </div>
+            </div>
+            
+            <button type="submit" class="btn btn-danger btn-sm w-100 mt-3 fw-bold">
+                <i class="fa-solid fa-eraser me-2"></i>Seçili Aralığı Temizle
+            </button>
+        </form>
+
+        <?php if (isset($_GET['msg']) && $_GET['msg'] == 'deleted'): ?>
+            <div class="mt-2 text-danger small fw-bold text-center">
+                <i class="fa-solid fa-check me-1"></i> Kayıtlar başarıyla temizlendi.
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
         </div>
     </div>
 </div>

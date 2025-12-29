@@ -87,6 +87,7 @@
 <div class="modal fade" id="addGroupModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
+            
             <form action="index.php?page=group_store" method="POST">
                 <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title"><i class="fa-solid fa-plus me-2"></i>Yeni Grup Oluştur</h5>

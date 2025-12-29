@@ -12,7 +12,7 @@ class DashboardController {
         $name = $_SESSION['name'] ?? 'Kullanıcı';
         $clubId = $_SESSION['club_id'] ?? null;
 
-        // View'da hata almamak için tüm anahtarları 0 olarak tanımlıyoruz
+        // İstatistikleri başlat
         $stats = [
             'totalClubs' => 0,
             'totalRevenue' => 0,
@@ -22,24 +22,46 @@ class DashboardController {
             'totalGroups' => 0,
             'totalCoaches' => 0
         ];
+        
         $criticalClubs = [];
         $recentActivity = [];
 
-        if ($role === 'SystemAdmin') {
-            // Süper Admin verilerini çek
-            try {
-                $stats['totalClubs'] = $this->db->query("SELECT COUNT(*) FROM Users WHERE RoleID = (SELECT RoleID FROM Roles WHERE RoleName = 'ClubAdmin')")->fetchColumn() ?: 0;
-                // Diğer istatistikleri buraya sorgu olarak ekleyebilirsin
-            } catch (Exception $e) {}
-            $view = __DIR__ . '/../Views/admin/dashboard.php';
-        } else {
-            // Kulüp Admin verilerini çek
-            try {
+        // HATA ÖNLEME: Varsayılan bir view yolu atıyoruz
+        $view = __DIR__ . '/../Views/admin/dashboard_club.php';
+
+        try {
+            // Role kontrolü (Küçük/Büyük harf duyarlılığını önlemek için strtolower kullanıldı)
+            $checkRole = strtolower($role);
+
+            if ($checkRole === 'systemadmin' || $checkRole === 'superadmin') {
+                // SÜPER ADMİN VERİLERİ
+                $stats['totalClubs'] = $this->db->query("SELECT COUNT(*) FROM Clubs")->fetchColumn() ?: 0;
+                $stats['totalGroups'] = $this->db->query("SELECT COUNT(*) FROM Groups")->fetchColumn() ?: 0;
+                
+                $view = __DIR__ . '/../Views/admin/dashboard.php';
+            } 
+            else {
+                // KULÜP ADMİN VEYA DİĞER ROLLER
                 if ($clubId) {
-                    $stats['totalStudents'] = $this->db->query("SELECT COUNT(*) FROM Students WHERE ClubID = $clubId")->fetchColumn() ?: 0;
+                    // Toplam Öğrenci
+                    $stmtS = $this->db->prepare("SELECT COUNT(*) FROM Students WHERE ClubID = ?");
+                    $stmtS->execute([$clubId]);
+                    $stats['totalStudents'] = $stmtS->fetchColumn() ?: 0;
+
+                    // Aktif Grup Sayısı
+                    $stmtG = $this->db->prepare("SELECT COUNT(*) FROM Groups WHERE ClubID = ?");
+                    $stmtG->execute([$clubId]);
+                    $stats['totalGroups'] = $stmtG->fetchColumn() ?: 0;
+
+                    // Toplam Antrenör
+                    $stmtC = $this->db->prepare("SELECT COUNT(*) FROM Coaches WHERE ClubID = ?");
+                    $stmtC->execute([$clubId]);
+                    $stats['totalCoaches'] = $stmtC->fetchColumn() ?: 0;
                 }
-            } catch (Exception $e) {}
-            $view = __DIR__ . '/../Views/admin/dashboard_club.php';
+                $view = __DIR__ . '/../Views/admin/dashboard_club.php';
+            }
+        } catch (Exception $e) {
+            // Hata durumunda loglanabilir
         }
 
         $data = [
@@ -57,11 +79,17 @@ class DashboardController {
     private function render($viewPath, $data = []) {
         extract($data);
         ob_start();
-        if (file_exists($viewPath)) {
+        
+        // HATA ÖNLEME: viewPath null gelirse veya dosya yoksa kontrol et
+        if (!empty($viewPath) && file_exists($viewPath)) {
             include $viewPath;
         } else {
-            echo "Dashboard Hazırlanıyor... Hoş geldiniz $name";
+            echo "<div class='container mt-5 alert alert-warning'>";
+            echo "<h4>Dashboard Hazırlanıyor...</h4>";
+            echo "<p>Hoş geldiniz <strong>$name</strong>. View dosyası bulunamadı veya yetki tanımlamanız eksik.</p>";
+            echo "</div>";
         }
+        
         $content = ob_get_clean();
         include __DIR__ . '/../Views/layouts/admin_layout.php';
     }
