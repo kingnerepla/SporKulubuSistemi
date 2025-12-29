@@ -1,9 +1,6 @@
 <?php
-require_once __DIR__ . '/../Config/Database.php';
-
 class GroupController {
     private $db;
-
     public function __construct() {
         $this->db = (new Database())->getConnection();
     }
