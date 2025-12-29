@@ -2,6 +2,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h3 class="fw-bold text-dark">Hoş Geldiniz, <?php echo htmlspecialchars($name); ?></h3>
+            <a href="index.php?page=profile">Profilim</a>
             <p class="text-muted small">Sistem genelindeki son durum ve kritik özetler aşağıdadır.</p>
         </div>
     </div>

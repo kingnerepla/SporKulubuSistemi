@@ -44,6 +44,11 @@
 
             <button type="submit" class="btn btn-primary w-100 fw-bold shadow-sm">Giriş Yap</button>
         </form>
+        <div class="text-center mt-3">
+            <a href="index.php?page=login" class="text-decoration-none small text-muted">
+                <i class="fa-solid fa-arrow-left"></i> Giriş Seçimine Dön
+            </a>
+        </div>
     </div>
 </body>
 </html>

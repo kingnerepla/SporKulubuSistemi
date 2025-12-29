@@ -8,35 +8,34 @@ class AuthController {
     }
 
     public function login() {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start(); // Session'ın açık olduğundan emin ol
+        }
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            // Formdaki name="email" kısmını alıyoruz
             $email = trim($_POST['email'] ?? '');
             $password = trim($_POST['password'] ?? '');
-
+    
             try {
-                // 1. Kullanıcıyı getir
-                $sql = "SELECT * FROM Users WHERE Email = ? OR email = ?";
+                // Sorguyu sadece Email ve PasswordHash üzerinden yapıyoruz
+                $sql = "SELECT * FROM Users WHERE Email = ? AND IsActive = 1";
                 $stmt = $this->db->prepare($sql);
-                $stmt->execute([$email, $email]);
+                $stmt->execute([$email]);
                 $user = $stmt->fetch(PDO::FETCH_ASSOC);
-
+    
                 if ($user) {
-                    $userData = array_change_key_case($user, CASE_LOWER);
-                    
-                    // Şifre sütununu bul
-                    $dbPass = null;
-                    $passKeys = ['password', 'pwd', 'sifre', 'userpassword'];
-                    foreach($passKeys as $key) {
-                        if (isset($userData[$key]) && !empty(trim($userData[$key]))) {
-                            $dbPass = trim($userData[$key]);
-                            break;
-                        }
-                    }
-
-                    // Şifre Doğrulama (123456 bypass dahil)
-                    if (($password === '123456' && (empty($dbPass) || $dbPass === '123456' || password_verify('123456', $dbPass))) || 
-                        ($dbPass && ($password === $dbPass || password_verify($password, $dbPass)))) {
+                    // Veritabanındaki PasswordHash değerini al
+                    $dbPass = isset($user['PasswordHash']) ? trim($user['PasswordHash']) : null;
+    
+                    // Şifre kontrolü
+                    if ($dbPass && ($password === $dbPass || password_verify($password, $dbPass))) {
                         
-                        $this->setSession($userData);
+                        // OTURUMU BAŞLAT (index.php'nin tanıması için)
+                        $_SESSION['user_id'] = $user['UserID']; 
+                        $_SESSION['user_name'] = $user['FullName'];
+                        $_SESSION['role'] = $user['Role'];
+    
+                        // Başarılı! Dashboard'a yönlendir
                         header("Location: index.php?page=dashboard");
                         exit;
                     }
@@ -44,12 +43,42 @@ class AuthController {
             } catch (Exception $e) {
                 die("Sorgu Hatası: " . $e->getMessage());
             }
-
-            header("Location: index.php?page=login&error=1");
+    
+            // Hatalı giriş: Formun olduğu sayfaya geri dön ve hata mesajı gönder
+            header("Location: index.php?page=admin_login_form&error=credentials");
             exit;
         }
     }
-
+    public function showSelection() {
+        // realpath kullanarak yolun doğruluğunu kontrol altına alıyoruz
+        $path = __DIR__ . '/../Views/auth/select.php';
+        if (!file_exists($path)) {
+            // Eğer yukarıdaki bulamazsa src takılı alternatifi dene
+            $path = __DIR__ . '/../../src/app/Views/auth/select.php';
+        }
+        include $path;
+    }
+    
+  
+    public function showAdminLogin() {
+        // __DIR__ üzerinden gitmek yerine index.php'nin bulunduğu ana dizini referans alalım
+        // index.php /var/www/html/src/ içindeyse, Views şuradadır:
+        
+        // YOL 1: Doğrudan dosya konumu üzerinden (E    n güvenli yol)
+        $path = dirname(__DIR__) . '/Views/auth/login.php';
+    
+        if (file_exists($path)) {
+            include $path;
+        } else {
+            // YOL 2: Eğer yukarıdaki başarısız olursa manuel zorlama
+            $manualPath = '/var/www/html/src/app/Views/admin/login.php';
+            if (file_exists($manualPath)) {
+                include $manualPath;
+            } else {
+                die("Hata: Dosya hiçbir yerde bulunamadı.<br>Denenen 1: $path<br>Denenen 2: $manualPath");
+            }
+        }
+    }
     private function setSession($data) {
         // Oturum verilerini güvenli bir şekilde ata
         $_SESSION['user_id'] = $data['userid'] ?? $data['id'] ?? 0;

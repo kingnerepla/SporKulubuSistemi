@@ -14,6 +14,67 @@ class GroupScheduleController {
         $this->render('group_schedule_edit', ['groupId' => $groupId, 'schedules' => $schedules]);
     }
 
+    // Takvimi Listele (Derslerin durumunu görmek için)
+    public function sessions() {
+        $clubId = $_SESSION['club_id'] ?? $_SESSION['selected_club_id'];
+        $groupId = $_GET['group_id'] ?? null;
+
+        $sql = "SELECT ts.*, g.GroupName 
+                FROM TrainingSessions ts 
+                JOIN Groups g ON ts.GroupID = g.GroupID 
+                WHERE ts.ClubID = ? " . ($groupId ? "AND ts.GroupID = ?" : "") . " 
+                ORDER BY ts.TrainingDate DESC, ts.StartTime ASC";
+        
+        $stmt = $this->db->prepare($sql);
+        $params = $groupId ? [$clubId, $groupId] : [$clubId];
+        $stmt->execute($params);
+        $sessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $this->render('training_sessions_list', ['sessions' => $sessions]);
+    }
+    public function trainingGroups() {
+        $clubId = $_SESSION['club_id'] ?? $_SESSION['selected_club_id'];
+        
+        // SQL Server'da kolonun varlığından emin olmak için sorguyu en güvenli hale getirdik
+        $stmt = $this->db->prepare("SELECT * FROM Groups WHERE ClubID = ?");
+        $stmt->execute([$clubId]);
+        $groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+        $this->render('training_groups_list', ['groups' => $groups]);
+    }
+
+    // 2. ADIM: Seçilen Grubun Takvimini Göster
+    public function groupCalendar() {
+        $groupId = $_GET['id'];
+        $clubId = $_SESSION['club_id'] ?? $_SESSION['selected_club_id'];
+
+        // Grup başlığı için grup adını al
+        $stmtG = $this->db->prepare("SELECT GroupName FROM Groups WHERE GroupID = ?");
+        $stmtG->execute([$groupId]);
+        $group = $stmtG->fetch(PDO::FETCH_ASSOC);
+
+        // Sadece bu gruba ait dersleri getir
+        $stmtS = $this->db->prepare("SELECT * FROM TrainingSessions WHERE GroupID = ? ORDER BY TrainingDate ASC");
+        $stmtS->execute([$groupId]);
+        $sessions = $stmtS->fetchAll(PDO::FETCH_ASSOC);
+
+        $this->render('group_calendar', ['group' => $group, 'sessions' => $sessions]);
+    }
+   
+    // Ders Durumunu Değiştir (İptal Etme vb.)
+    public function updateSessionStatus() {
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $sessionId = $_POST['session_id'];
+            $status = $_POST['status']; // 'Cancelled', 'Completed', 'Scheduled'
+            $note = $_POST['note'] ?? null;
+
+            $sql = "UPDATE TrainingSessions SET Status = ?, Note = ? WHERE SessionID = ?";
+            $this->db->prepare($sql)->execute([$status, $note, $sessionId]);
+
+            header("Location: " . $_SERVER['HTTP_REFERER']);
+            exit;
+        }
+    }
     // Şablonu Kaydet
     public function save() {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {

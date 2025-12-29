@@ -45,7 +45,43 @@ class ClubFinanceController {
 
         $this->render('finance_list', ['summary' => $summary, 'stats' => $stats]);
     }
-
+    public function sessions() {
+        $clubId = $_SESSION['club_id'] ?? $_SESSION['selected_club_id'];
+        $groupId = $_GET['group_id'] ?? null;
+        $range = $_GET['range'] ?? 'week';
+    
+        $sql = "SELECT ts.*, g.GroupName 
+                FROM TrainingSessions ts 
+                JOIN Groups g ON ts.GroupID = g.GroupID 
+                WHERE ts.ClubID = ?";
+        
+        $params = [$clubId];
+    
+        if ($groupId) {
+            $sql .= " AND ts.GroupID = ?";
+            $params[] = $groupId;
+        }
+    
+        if ($range == 'today') {
+            $sql .= " AND ts.TrainingDate = CAST(GETDATE() AS DATE)";
+        } elseif ($range == 'week') {
+            // Bu haftaki dersler
+            $sql .= " AND ts.TrainingDate BETWEEN CAST(GETDATE() AS DATE) AND CAST(DATEADD(day, 7, GETDATE()) AS DATE)";
+        }
+    
+        $sql .= " ORDER BY ts.TrainingDate ASC, ts.StartTime ASC";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        $sessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+        // Grupları filtreleme için çek
+        $stmtG = $this->db->prepare("SELECT GroupID, GroupName FROM Groups WHERE ClubID = ?");
+        $stmtG->execute([$clubId]);
+        $groups = $stmtG->fetchAll(PDO::FETCH_ASSOC);
+    
+        $this->render('training_sessions_list', ['sessions' => $sessions, 'groups' => $groups]);
+    }
     // --- TAHSİLAT İŞLEMİ (ÖDEME ALMA) ---
     public function collect() {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
