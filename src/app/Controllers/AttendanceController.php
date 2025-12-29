@@ -125,49 +125,30 @@ class AttendanceController {
     public function report() {
         $db = (new Database())->getConnection();
         $clubId = $_SESSION['club_id'];
-        
-        // Filtreleme parametreleri
-        $groupId = $_GET['group_id'] ?? null;
-        $monthYear = $_GET['month'] ?? date('Y-m'); // Varsayılan cari ay
-        
-        $parts = explode('-', $monthYear);
-        $year = $parts[0];
-        $month = $parts[1];
-        $daysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
+        $role = trim(strtolower($_SESSION['role'] ?? ''));
     
-        // Grupları getir (Filtre menüsü için)
-        $stmtG = $db->prepare("SELECT GroupID, GroupName FROM Groups WHERE ClubID = ?");
-        $stmtG->execute([$clubId]);
-        $groups = $stmtG->fetchAll(PDO::FETCH_ASSOC);
+        // 1. Kulübün antrenör yetkisini kontrol et
+        $stmtClub = $db->prepare("SELECT CoachReportAccess FROM Clubs WHERE ClubID = ?");
+        $stmtClub->execute([$clubId]);
+        $clubSettings = $stmtClub->fetch(PDO::FETCH_ASSOC);
     
-        $reportData = [];
-        if ($groupId) {
-            // Yoklama verilerini çek
-            $sql = "SELECT s.FullName, DAY(a.AttendanceDate) as DayNum, a.Status
-                    FROM Students s
-                    LEFT JOIN Attendance a ON s.StudentID = a.StudentID 
-                    AND MONTH(a.AttendanceDate) = ? 
-                    AND YEAR(a.AttendanceDate) = ?
-                    WHERE s.GroupID = ? AND s.IsActive = 1
-                    ORDER BY s.FullName, a.AttendanceDate";
-            
-            $stmt = $db->prepare($sql);
-            $stmt->execute([$month, $year, $groupId]);
-            $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-            // Veriyi sporcu bazlı grupla
-            foreach ($results as $row) {
-                $reportData[$row['FullName']][$row['DayNum']] = $row['Status'];
+        // 2. YETKİ KONTROLÜ
+        if ($role !== 'admin') { // Eğer admin değilse (yani antrenörse)
+            if ($role === 'coach') {
+                // Kulüp ayarı kapalıysa antrenörü engelle
+                if (($clubSettings['CoachReportAccess'] ?? 0) == 0) {
+                    header("Location: index.php?page=dashboard&error=no_access");
+                    exit;
+                }
+            } else {
+                // Başka bir rol (veli vs.) zaten göremez
+                header("Location: index.php?page=dashboard");
+                exit;
             }
         }
     
-        $this->render('attendance_report', [
-            'groups' => $groups,
-            'reportData' => $reportData,
-            'daysInMonth' => $daysInMonth,
-            'selectedGroup' => $groupId,
-            'selectedMonth' => $monthYear
-        ]);
+        // --- Buradan sonrası mevcut rapor kodların ---
+        // Eğer antrenörse SQL'e "AND CoachID = ?" ekleyerek sadece kendi grubunu görmesini sağlayacağız
     }
     private function render($view, $data = []) {
         extract($data);

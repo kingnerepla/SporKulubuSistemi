@@ -15,6 +15,7 @@
         .sidebar-heading { padding: 20px; font-size: 1.2rem; color: #fff; border-bottom: 1px solid #34495e; font-weight: bold; }
         .list-group-item { background: #2c3e50; color: #bdc3c7; border: none; padding: 12px 20px; font-size: 0.95rem; }
         .list-group-item:hover { background: #34495e; color: #fff; }
+        .list-group-item.active { background: #34495e; color: #fff; border-left: 4px solid #3498db; }
         .list-group-item i { width: 25px; }
         .menu-header { color: #7f8c8d; font-size: 0.75rem; font-weight: bold; text-transform: uppercase; padding: 20px 20px 5px 20px; letter-spacing: 1px; }
         #page-content-wrapper { width: 100%; padding: 20px; }
@@ -31,14 +32,17 @@ $roleId = intval($_SESSION['role_id'] ?? $_SESSION['RoleID'] ?? 0);
 
 // 2. Yetki Tanımları
 $isSystemAdmin = ($roleId === 1 || $currentRole === 'systemadmin');
-$isClubAdmin   = ($roleId === 2 || $currentRole === 'clubadmin');
+$isClubAdmin   = ($roleId === 2 || $currentRole === 'clubadmin' || $currentRole === 'admin');
 $isCoach       = ($roleId === 3 || $currentRole === 'coach' || $currentRole === 'trainer');
 
-// Kulüp içeriği gösterilsin mi? (Admin veya Antrenörse)
+// Kulüp içeriği gösterilsin mi?
 $showClubMenu = ($isClubAdmin || $isCoach || ($isSystemAdmin && isset($_SESSION['selected_club_id'])));
 
 // Navbar Başlığı
 $displayClubName = $_SESSION['selected_club_name'] ?? $_SESSION['club_name'] ?? 'Sistem Paneli';
+
+// SAYFA DEĞİŞKENİ (Active class için)
+$activePage = $_GET['page'] ?? 'dashboard';
 ?>
 
 <div id="wrapper">
@@ -48,16 +52,16 @@ $displayClubName = $_SESSION['selected_club_name'] ?? $_SESSION['club_name'] ?? 
         </div>
         
         <div class="list-group list-group-flush">
-            <a href="index.php?page=dashboard" class="list-group-item list-group-item-action">
+            <a href="index.php?page=dashboard" class="list-group-item list-group-item-action <?= ($activePage == 'dashboard') ? 'active' : '' ?>">
                 <i class="fa-solid fa-house me-2"></i> Dashboard
             </a>
 
             <?php if ($isSystemAdmin): ?>
                 <div class="menu-header">Sistem Sahibi</div>
-                <a href="index.php?page=clubs" class="list-group-item list-group-item-action">
+                <a href="index.php?page=clubs" class="list-group-item list-group-item-action <?= ($activePage == 'clubs') ? 'active' : '' ?>">
                     <i class="fa-solid fa-building me-2 text-info"></i> Kulüp Denetimi
                 </a>
-                <a href="index.php?page=system_finance" class="list-group-item list-group-item-action">
+                <a href="index.php?page=system_finance" class="list-group-item list-group-item-action <?= ($activePage == 'system_finance') ? 'active' : '' ?>">
                     <i class="fa-solid fa-wallet me-2 text-success"></i> Sistem Finans
                 </a>
             <?php endif; ?>
@@ -66,32 +70,51 @@ $displayClubName = $_SESSION['selected_club_name'] ?? $_SESSION['club_name'] ?? 
                 <div class="menu-header"><?php echo $isCoach ? 'Eğitim Menüsü' : 'Kulüp İşlemleri'; ?></div>
                 
                 <?php if (!$isCoach): ?>
-                    <a href="index.php?page=coaches" class="list-group-item list-group-item-action">
-                        <i class="fa-solid fa-user-tie"></i> Antrenörler
+                    <a href="index.php?page=coaches" class="list-group-item list-group-item-action <?= ($activePage == 'coaches') ? 'active' : '' ?>">
+                        <i class="fa-solid fa-user-tie me-2"></i> Antrenörler
                     </a>
                 <?php endif; ?>
 
-                <a href="index.php?page=students" class="list-group-item list-group-item-action">
+                <a href="index.php?page=students" class="list-group-item list-group-item-action <?= ($activePage == 'students') ? 'active' : '' ?>">
                     <i class="fa-solid fa-user-graduate me-2 text-warning"></i> 
                     <?php echo $isCoach ? 'Öğrencilerim' : 'Öğrenciler'; ?>
                 </a>
 
-                <a href="index.php?page=groups" class="list-group-item list-group-item-action">
+                <?php 
+                    // Adminse her zaman görsün, Antrenörse yetkiye bakılsın
+                    $canSeeReport = false;
+                    if ($isClubAdmin) {
+                        $canSeeReport = true;
+                    } elseif ($isCoach) {
+                        // Controller'dan gelen veya session'da tutulan yetki bilgisini kontrol et
+                        if (isset($_SESSION['coach_report_access']) && $_SESSION['coach_report_access'] == 1) {
+                            $canSeeReport = true;
+                        }
+                    }
+
+                    if ($canSeeReport): 
+                ?>
+                    <a href="index.php?page=attendance_report" class="list-group-item list-group-item-action <?= ($activePage == 'attendance_report') ? 'active' : '' ?>">
+                        <i class="fa-solid fa-chart-column me-2 text-success"></i> Yoklama Raporları
+                    </a>
+                <?php endif; ?>
+
+                <a href="index.php?page=groups" class="list-group-item list-group-item-action <?= ($activePage == 'groups') ? 'active' : '' ?>">
                     <i class="fa-solid fa-people-group me-2 text-primary"></i> 
                     <?php echo $isCoach ? 'Gruplarım' : 'Gruplar / Dersler'; ?>
                 </a>
 
-                <a href="index.php?page=attendance" class="list-group-item list-group-item-action">
+                <a href="index.php?page=attendance" class="list-group-item list-group-item-action <?= ($activePage == 'attendance') ? 'active' : '' ?>">
                     <i class="fa-solid fa-calendar-check me-2 text-info"></i> Yoklama Al
                 </a>
                            
-                <a class="list-group-item list-group-item-action" href="index.php?page=training_groups">
+                <a href="index.php?page=training_groups" class="list-group-item list-group-item-action <?= ($activePage == 'training_groups') ? 'active' : '' ?>">
                     <i class="fa-solid fa-calendar-days me-2"></i> Çalışma Takvimi
                 </a>
           
                 <?php if (!$isCoach): ?>
                     <div class="menu-header">Finansal Takip</div>
-                    <a href="index.php?page=club_finance" class="list-group-item list-group-item-action">
+                    <a href="index.php?page=club_finance" class="list-group-item list-group-item-action <?= ($activePage == 'club_finance') ? 'active' : '' ?>">
                         <i class="fa-solid fa-money-bill-transfer me-2 text-success"></i> Aidat Takibi
                     </a>
                 <?php endif; ?>

@@ -2,7 +2,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h4 class="fw-bold text-dark mb-1">Antrenör Yönetimi</h4>
-            <p class="text-muted small">Kulübünüzdeki antrenörleri listeleyebilir ve bilgilerini güncelleyebilirsiniz.</p>
+            <p class="text-muted small">Kulübünüzdeki antrenörleri listeleyebilir ve rapor erişim yetkilerini düzenleyebilirsiniz.</p>
         </div>
         <button class="btn btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#addCoachModal">
             <i class="fa-solid fa-user-plus me-2"></i>Yeni Antrenör Ekle
@@ -17,9 +17,8 @@
                         <tr>
                             <th class="ps-4">Ad Soyad</th>
                             <th>E-Posta</th>
-                            <th>Telefon</th>
+                            <th>Rapor Yetkisi</th> 
                             <th>Durum</th>
-                            <th>Kayıt Tarihi</th>
                             <th class="text-end pe-4">İşlemler</th>
                         </tr>
                     </thead>
@@ -32,11 +31,22 @@
                                             <div class="avatar-sm bg-primary-soft text-primary rounded-circle me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; background: #e7f1ff;">
                                                 <i class="fa-solid fa-user-tie"></i>
                                             </div>
-                                            <span class="fw-bold text-dark"><?= htmlspecialchars($coach['FullName']) ?></span>
+                                            <div>
+                                                <div class="fw-bold text-dark"><?= htmlspecialchars($coach['FullName']) ?></div>
+                                                <div class="text-muted small"><?= htmlspecialchars($coach['Phone'] ?? '-') ?></div>
+                                            </div>
                                         </div>
                                     </td>
                                     <td><?= htmlspecialchars($coach['Email']) ?></td>
-                                    <td><?= htmlspecialchars($coach['Phone'] ?? '-') ?></td>
+                                    <td>
+                                        <?php if (isset($coach['CanSeeReports']) && $coach['CanSeeReports'] == 1): ?>
+                                            <span class="badge bg-info-subtle text-info border border-info-subtle">
+                                                <i class="fa-solid fa-eye me-1"></i> Yetkili
+                                            </span>
+                                        <?php else: ?>
+                                            <span class="badge bg-light text-muted border">Kısıtlı</span>
+                                        <?php endif; ?>
+                                    </td>
                                     <td>
                                         <?php if ($coach['IsActive']): ?>
                                             <span class="badge bg-success-soft text-success border border-success">Aktif</span>
@@ -44,40 +54,20 @@
                                             <span class="badge bg-danger-soft text-danger border border-danger">Pasif</span>
                                         <?php endif; ?>
                                     </td>
-                                    <td class="small text-muted"><?= date('d.m.Y', strtotime($coach['CreatedAt'])) ?></td>
                                     <td class="text-end pe-4">
                                         <div class="d-flex justify-content-end gap-2">
-                                            <button type="button" 
-                                                    class="btn btn-sm btn-outline-info" 
-                                                    onclick="showLoginDetails('<?= htmlspecialchars($coach['FullName']) ?>', '<?= htmlspecialchars($coach['Email']) ?>')"
-                                                    title="Giriş Bilgilerini Gör">
-                                                <i class="fa-solid fa-key"></i>
-                                            </button>
-
-                                            <button type="button" 
-                                                    class="btn btn-sm btn-outline-primary" 
-                                                    onclick="editCoach('<?= $coach['UserID'] ?>', '<?= htmlspecialchars($coach['FullName']) ?>', '<?= htmlspecialchars($coach['Email']) ?>', '<?= htmlspecialchars($coach['Phone'] ?? '') ?>')"
-                                                    title="Düzenle">
+                                            <button type="button" class="btn btn-sm btn-outline-info" onclick="showLoginDetails('<?= htmlspecialchars($coach['FullName']) ?>', '<?= htmlspecialchars($coach['Email']) ?>')"><i class="fa-solid fa-key"></i></button>
+                                            
+                                            <button type="button" class="btn btn-sm btn-outline-primary" 
+                                                    onclick="editCoach('<?= $coach['UserID'] ?>', '<?= htmlspecialchars($coach['FullName']) ?>', '<?= htmlspecialchars($coach['Email']) ?>', '<?= htmlspecialchars($coach['Phone'] ?? '') ?>', '<?= $coach['CanSeeReports'] ?? 0 ?>')">
                                                 <i class="fa-solid fa-pen"></i>
                                             </button>
 
-                                            <a href="index.php?page=coach_delete&id=<?= $coach['UserID'] ?>" 
-                                               class="btn btn-sm btn-outline-danger" 
-                                               onclick="return confirm('Bu antrenörü silmek istediğinize emin misiniz?')"
-                                               title="Sil">
-                                                <i class="fa-solid fa-trash"></i>
-                                            </a>
+                                            <a href="index.php?page=coach_delete&id=<?= $coach['UserID'] ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Bu antrenörü silmek istediğinize emin misiniz?')"><i class="fa-solid fa-trash"></i></a>
                                         </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
-                        <?php else: ?>
-                            <tr>
-                                <td colspan="6" class="text-center py-5">
-                                    <img src="https://cdn-icons-png.flaticon.com/512/4076/4076402.png" width="80" class="opacity-25 mb-3">
-                                    <p class="text-muted">Henüz kayıtlı bir antrenör bulunamadı.</p>
-                                </td>
-                            </tr>
                         <?php endif; ?>
                     </tbody>
                 </table>
@@ -96,24 +86,31 @@
             <div class="modal-body p-4">
                 <div class="mb-3">
                     <label class="form-label small fw-bold">Ad Soyad</label>
-                    <input type="text" name="full_name" class="form-control" required placeholder="Örn: Ahmet Yılmaz">
+                    <input type="text" name="full_name" class="form-control" required placeholder="Ad Soyad giriniz">
                 </div>
-                <div class="mb-3">
-                    <label class="form-label small fw-bold">E-Posta (Giriş İçin)</label>
-                    <input type="email" name="email" class="form-control" required placeholder="antrenor@kulup.com">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label small fw-bold">E-Posta</label>
+                        <input type="email" name="email" class="form-control" required placeholder="ornek@mail.com">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label small fw-bold">Telefon</label>
+                        <input type="text" name="phone" id="add_phone" class="form-control">
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label small fw-bold">Telefon</label>
-                    <input type="text" name="phone" class="form-control" placeholder="0(5__) ___ __ __">
+                <div class="mb-3 p-3 bg-light rounded border">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="can_see_reports" id="add_can_see_reports" value="1">
+                        <label class="form-check-label fw-bold small ms-2" for="add_can_see_reports">Yoklama Rapor Yetkisi</label>
+                        <div class="form-text mt-1" style="font-size: 0.7rem;">Aktif edilirse antrenör aylık raporları görebilir.</div>
+                    </div>
                 </div>
                 <div class="mb-0">
                     <label class="form-label small fw-bold">Giriş Şifresi</label>
                     <input type="password" name="password" class="form-control" required value="123456">
-                    <div class="form-text text-muted" style="font-size: 0.7rem;">Varsayılan şifre: 123456</div>
                 </div>
             </div>
             <div class="modal-footer bg-light">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
                 <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold">Antrenörü Kaydet</button>
             </div>
         </form>
@@ -133,22 +130,28 @@
                     <label class="form-label small fw-bold">Ad Soyad</label>
                     <input type="text" name="full_name" id="edit_full_name" class="form-control" required>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label small fw-bold">E-Posta</label>
-                    <input type="email" name="email" id="edit_email" class="form-control" required>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label small fw-bold">E-Posta</label>
+                        <input type="email" name="email" id="edit_email" class="form-control" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label small fw-bold">Telefon</label>
+                        <input type="text" name="phone" id="edit_phone" class="form-control">
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label small fw-bold">Telefon</label>
-                    <input type="text" name="phone" id="edit_phone" class="form-control" placeholder="0(5__) ___ __ __">
-                    
+                <div class="mb-3 p-3 bg-light rounded border">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="can_see_reports" id="edit_can_see_reports" value="1">
+                        <label class="form-check-label fw-bold small ms-2" for="edit_can_see_reports">Yoklama Rapor Yetkisi</label>
+                    </div>
                 </div>
                 <div class="mb-0">
                     <label class="form-label small fw-bold text-primary">Yeni Şifre</label>
-                    <input type="password" name="password" class="form-control" placeholder="Değiştirmek istemiyorsanız boş bırakın">
+                    <input type="password" name="password" class="form-control" placeholder="Boş bırakırsanız değişmez">
                 </div>
             </div>
             <div class="modal-footer bg-light">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
                 <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold">Güncelle</button>
             </div>
         </form>
@@ -169,16 +172,27 @@
                     <small class="text-muted d-block">E-Posta:</small>
                     <strong id="displayCoachEmail" class="text-dark"></strong>
                 </div>
-                <div class="alert alert-warning small mb-0 p-2" style="font-size: 0.75rem;">
-                    <i class="fa-solid fa-circle-info me-1"></i> Şifreler güvenlik gereği gizlidir. Şifreyi güncellemek için "Düzenle" butonunu kullanın.
-                </div>
             </div>
         </div>
     </div>
 </div>
 
+<script src="https://unpkg.com/imask"></script>
 <script>
-// Giriş Bilgilerini Göster
+// Düzenleme Modalını Doldur ve Aç
+function editCoach(id, name, email, phone, canSeeReports) {
+    document.getElementById('edit_user_id').value = id;
+    document.getElementById('edit_full_name').value = name;
+    document.getElementById('edit_email').value = email;
+    document.getElementById('edit_phone').value = phone;
+    
+    // Yetki switch durumunu ayarla
+    document.getElementById('edit_can_see_reports').checked = (canSeeReports == 1);
+    
+    var editModal = new bootstrap.Modal(document.getElementById('editCoachModal'));
+    editModal.show();
+}
+
 function showLoginDetails(name, email) {
     document.getElementById('displayCoachName').innerText = name;
     document.getElementById('displayCoachEmail').innerText = email;
@@ -186,33 +200,17 @@ function showLoginDetails(name, email) {
     myModal.show();
 }
 
-// Düzenleme Modalını Doldur ve Aç
-function editCoach(id, name, email, phone) {
-    document.getElementById('edit_user_id').value = id;
-    document.getElementById('edit_full_name').value = name;
-    document.getElementById('edit_email').value = email;
-    document.getElementById('edit_phone').value = phone;
-    var editModal = new bootstrap.Modal(document.getElementById('editCoachModal'));
-    editModal.show();
-}
-</script>
-<script src="https://unpkg.com/imask"></script>
-
-<script src="https://unpkg.com/imask"></script>
-
-<script>
 document.addEventListener('DOMContentLoaded', function() {
-    // 0(5XX) XXX XX XX Formatı için maske ayarı
-    var maskOptions = {
+    var maskOptions = { 
         mask: '0(000) 000 00 00',
-        lazy: false // Kullanıcı tıklayınca şablonu (0(___) ___ __ __ şeklinde) gösterir
+        lazy: false 
     };
-
-    // Yeni Antrenör Ekleme Modalındaki Telefon Alanı
-    var addPhoneEl = document.querySelector('#addCoachModal input[name="phone"]');
+    
+    // Yeni ekleme modalı telefonu için id: add_phone
+    var addPhoneEl = document.getElementById('add_phone');
     if(addPhoneEl) IMask(addPhoneEl, maskOptions);
-
-    // Düzenleme Modalındaki Telefon Alanı
+    
+    // Düzenleme modalı telefonu için id: edit_phone
     var editPhoneEl = document.getElementById('edit_phone');
     if(editPhoneEl) IMask(editPhoneEl, maskOptions);
 });
