@@ -1,4 +1,18 @@
 <div class="container-fluid">
+    <?php if (isset($_GET['success']) && $_GET['success'] == 'template_saved'): ?>
+        <div class="row">
+            <div class="col-12">
+                <div class="alert alert-success d-flex align-items-center shadow-sm border-0 mb-4" role="alert" style="background-color: #d1e7dd; color: #0f5132;">
+                    <i class="fa-solid fa-circle-check fs-4 me-3"></i>
+                    <div>
+                        <h6 class="mb-0 fw-bold">Haftalık Şablon Kaydedildi!</h6>
+                        <small>Şimdi sağ taraftaki panelden tarih aralığı seçerek <strong>"Antrenmanları Oluştur"</strong> butonuna basabilirsiniz.</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?>
+
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h3 class="fw-bold"><i class="fa-solid fa-calendar-week text-primary me-2"></i>Haftalık Program Düzenle</h3>
         <a href="index.php?page=groups" class="btn btn-secondary btn-sm">Geri Dön</a>
@@ -17,7 +31,6 @@
                         <?php 
                         $gunler = [1 => 'Pazartesi', 2 => 'Salı', 3 => 'Çarşamba', 4 => 'Perşembe', 5 => 'Cuma', 6 => 'Cumartesi', 7 => 'Pazar'];
                         foreach($gunler as $num => $ad): 
-                            // Mevcut veriyi bul
                             $data = null;
                             foreach($schedules as $s) { if($s['DayOfWeek'] == $num) $data = $s; }
                         ?>
@@ -53,6 +66,7 @@
                     <h5 class="mb-0 fw-bold text-primary">Dersleri Takvime İşle</h5>
                     <small class="text-muted">Şablona göre toplu antrenman kaydı oluşturur.</small>
                 </div>
+                
                 <form action="index.php?page=generate_sessions" method="POST" class="card-body">
                     <input type="hidden" name="group_id" value="<?= $groupId ?>">
                     
