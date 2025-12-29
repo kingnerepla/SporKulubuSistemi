@@ -38,7 +38,7 @@ class GroupScheduleController {
         $this->render('training_groups_list', ['groups' => $groups]);
     }
 
-    // Grup Takvimi (Silme ve Düzenleme Yapılan Yer)
+    // Grup Takvimi
     public function groupCalendar() {
         $groupId = $_GET['id'];
         $stmtG = $this->db->prepare("SELECT GroupName FROM Groups WHERE GroupID = ?");
@@ -52,7 +52,7 @@ class GroupScheduleController {
         $this->render('group_calendar', ['group' => $group, 'sessions' => $sessions, 'groupId' => $groupId]);
     }
 
-    // TEKLİ SİLME (Azure SessionID uyumlu)
+    // TEKLİ SİLME
     public function deleteSingleSession() {
         $sessionId = $_GET['id'] ?? null;
         $groupId = $_GET['group_id'] ?? null;
@@ -65,15 +65,12 @@ class GroupScheduleController {
         try {
             $this->db->beginTransaction();
     
-            // 1. ADIM: Attendance tablosundaki bağlantıyı kopar
-            // Burada da SessionID ismini Azure'da gördüğün gibi tam yazıyoruz
-            $stmt1 = $this->db->prepare("DELETE FROM [dbo].[TrainingSessions] WHERE [SessionID] = ?");
-         
+            // Önce varsa yoklama kayıtlarını sil (Yabancı anahtar hatasını önlemek için)
+            $stmt1 = $this->db->prepare("DELETE FROM [dbo].[Attendance] WHERE [SessionID] = ?");
             $stmt1->execute([$sessionId]);
     
-            // 2. ADIM: TrainingSessions tablosundan sil
-            // SQL Server bazen dbo şemasını zorunlu tutar
-            $stmt2 = $this->db->prepare("DELETE FROM TrainingSessions WHERE SessionID = ?");
+            // Sonra antrenmanı sil
+            $stmt2 = $this->db->prepare("DELETE FROM [dbo].[TrainingSessions] WHERE [SessionID] = ?");
             $stmt2->execute([$sessionId]);
     
             $this->db->commit();
@@ -81,56 +78,53 @@ class GroupScheduleController {
             exit;
     
         } catch (Exception $e) {
-            $this->db->rollBack();
-            // Eğer hata devam ederse, tablo yapısını ekrana bastıran bir debug yapalım
-            die("Hata Devam Ediyor: " . $e->getMessage());
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            die("Silme Hatası: " . $e->getMessage());
         }
     }
 
-    // DURUM GÜNCELLEME - SQL Server için optimize edildi
+    // DURUM GÜNCELLEME (Düzeltildi)
     public function updateSessionStatus() {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            // Formdan gelen verileri alıyoruz
+            // Formdan gelen verileri al
             $sessionId = $_POST['session_id'] ?? null;
             $status    = $_POST['status'] ?? null;
             $note      = $_POST['note'] ?? null;
-            $groupId   = $_POST['group_id'] ?? $_GET['group_id'] ?? null;
+            
+            // Grup ID'sini hem POST hem GET hem de REQUEST içinden kovalıyoruz
+            $groupId   = $_POST['group_id'] ?? $_GET['group_id'] ?? $_REQUEST['group_id'] ?? null;
     
             if (!$sessionId) {
-                die("Hata: Oturum ID'si eksik.");
+                header("Location: index.php?page=dashboard&error=missing_id");
+                exit;
             }
     
             try {
-                // SQL Server için en güvenli sorgu yazımı
-                // Tablo ve kolon isimlerini [] içine alarak şemayı (dbo) belirtiyoruz
+                // 1. Durumu Güncelle (Kolon isimlerini [] içine alarak Azure'u zorluyoruz)
                 $sql = "UPDATE [dbo].[TrainingSessions] 
-                        SET [Status] = :status, [Note] = :note 
-                        WHERE [SessionID] = :id";
+                        SET [Status] = ?, [Note] = ? 
+                        WHERE [SessionID] = ?";
                 
                 $stmt = $this->db->prepare($sql);
-                $result = $stmt->execute([
-                    ':status' => $status,
-                    ':note'   => $note,
-                    ':id'     => $sessionId
-                ]);
+                $stmt->execute([$status, $note, $sessionId]);
     
-                // İşlem başarılıysa veya başarısızsa her durumda takvime dön, Dashboard'a gitme
-                $redirectUrl = "index.php?page=group_calendar&id=" . ($groupId ?? 0);
-                
-                if ($result) {
-                    header("Location: " . $redirectUrl . "&msg=updated");
-                } else {
-                    // Sorgu çalıştı ama etkilenen satır yoksa
-                    header("Location: " . $redirectUrl . "&error=no_change");
+                // 2. Yönlendirme Güvenliği: Eğer hala groupId yoksa veritabanından seansın grubunu bul
+                if (!$groupId || $groupId == 0) {
+                    $check = $this->db->prepare("SELECT GroupID FROM [dbo].[TrainingSessions] WHERE [SessionID] = ?");
+                    $check->execute([$sessionId]);
+                    $groupId = $check->fetchColumn();
                 }
-                exit;
+    
+                // 3. KESİN YÖNLENDİRME (URL'yi manuel inşa ediyoruz)
+                $finalUrl = "index.php?page=group_calendar&id=" . (int)$groupId . "&msg=updated";
+                header("Location: " . $finalUrl);
+                exit; // PHP'nin başka bir yere sapmasını engeller
     
             } catch (Exception $e) {
-                // Hata olursa Dashboard'a atmak yerine hatayı ekrana bas ki görelim
-                echo "<h3>Veritabanı Hatası:</h3>";
-                echo $e->getMessage();
-                echo "<br><a href='javascript:history.back()'>Geri Dön</a>";
-                exit;
+                // Hata olursa Dashboard'a atma, hatayı bas ki görelim
+                die("SQL HATASI: " . $e->getMessage());
             }
         }
     }
@@ -153,7 +147,9 @@ class GroupScheduleController {
                 header("Location: index.php?page=group_schedule&id=$groupId&success=template_saved");
                 exit;
             } catch (Exception $e) {
-                $this->db->rollBack();
+                if ($this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
                 die("Hata: " . $e->getMessage());
             }
         }
@@ -191,7 +187,12 @@ class GroupScheduleController {
 
     private function render($view, $data = []) {
         extract($data); ob_start();
-        include __DIR__ . "/../Views/admin/{$view}.php";
+        $viewPath = __DIR__ . "/../Views/admin/{$view}.php";
+        if (file_exists($viewPath)) {
+            include $viewPath;
+        } else {
+            echo "Görünüm dosyası bulunamadı: $view";
+        }
         $content = ob_get_clean();
         include __DIR__ . '/../Views/layouts/admin_layout.php';
     }

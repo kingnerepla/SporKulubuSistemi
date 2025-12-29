@@ -12,7 +12,7 @@ class DashboardController {
         $name = $_SESSION['name'] ?? 'Kullanıcı';
         $clubId = $_SESSION['club_id'] ?? null;
 
-        // İstatistikleri başlat
+        // 1. Tüm anahtarları varsayılan 0 ile başlatıyoruz (View hatalarını önler)
         $stats = [
             'totalClubs' => 0,
             'totalRevenue' => 0,
@@ -23,73 +23,76 @@ class DashboardController {
             'totalCoaches' => 0
         ];
         
-        $criticalClubs = [];
         $recentActivity = [];
-
-        // HATA ÖNLEME: Varsayılan bir view yolu atıyoruz
-        $view = __DIR__ . '/../Views/admin/dashboard_club.php';
+        $criticalClubs = []; // Admin view için gerekli
 
         try {
-            // Role kontrolü (Küçük/Büyük harf duyarlılığını önlemek için strtolower kullanıldı)
             $checkRole = strtolower($role);
 
             if ($checkRole === 'systemadmin' || $checkRole === 'superadmin') {
-                // SÜPER ADMİN VERİLERİ
-                $stats['totalClubs'] = $this->db->query("SELECT COUNT(*) FROM Clubs")->fetchColumn() ?: 0;
-                $stats['totalGroups'] = $this->db->query("SELECT COUNT(*) FROM Groups")->fetchColumn() ?: 0;
+                // --- SİSTEM YÖNETİCİSİ (Süper Admin) ---
+                $stats['totalClubs'] = $this->getScalar("SELECT COUNT(*) FROM [Clubs]");
+                $stats['totalGroups'] = $this->getScalar("SELECT COUNT(*) FROM [Groups]");
+                
+                // Admin dashboard'da son aktiviteleri göster (Örn: Son eklenen kulüpler)
+                $recentActivity = $this->db->query("SELECT TOP 5 [ClubName] as FullName, [CreatedAt] FROM [Clubs] ORDER BY [ClubID] DESC")->fetchAll(PDO::FETCH_ASSOC);
                 
                 $view = __DIR__ . '/../Views/admin/dashboard.php';
             } 
             else {
-                // KULÜP ADMİN VEYA DİĞER ROLLER
+                // --- KULÜP YÖNETİCİSİ ---
                 if ($clubId) {
-                    // Toplam Öğrenci
-                    $stmtS = $this->db->prepare("SELECT COUNT(*) FROM Students WHERE ClubID = ?");
-                    $stmtS->execute([$clubId]);
-                    $stats['totalStudents'] = $stmtS->fetchColumn() ?: 0;
+                    $stats['totalStudents'] = $this->getScalar("SELECT COUNT(*) FROM [Students] WHERE [ClubID] = ? OR [club_id] = ?", [$clubId, $clubId]);
+                    $stats['totalGroups'] = $this->getScalar("SELECT COUNT(*) FROM [Groups] WHERE [ClubID] = ?", [$clubId]);
+                    $stats['totalCoaches'] = $this->getScalar("SELECT COUNT(*) FROM [Coaches] WHERE [ClubID] = ?", [$clubId]);
 
-                    // Aktif Grup Sayısı
-                    $stmtG = $this->db->prepare("SELECT COUNT(*) FROM Groups WHERE ClubID = ?");
-                    $stmtG->execute([$clubId]);
-                    $stats['totalGroups'] = $stmtG->fetchColumn() ?: 0;
-
-                    // Toplam Antrenör
-                    $stmtC = $this->db->prepare("SELECT COUNT(*) FROM Coaches WHERE ClubID = ?");
-                    $stmtC->execute([$clubId]);
-                    $stats['totalCoaches'] = $stmtC->fetchColumn() ?: 0;
+                    // YENİ KAYITLAR: Gerçek kolon isimlerin olan FullName ve CreatedAt kullanılıyor
+                    $query = "SELECT TOP 5 [FullName], [CreatedAt] 
+                              FROM [Students] 
+                              WHERE [ClubID] = ? OR [club_id] = ? 
+                              ORDER BY [StudentID] DESC";
+                    
+                    $stmt = $this->db->prepare($query);
+                    $stmt->execute([$clubId, $clubId]);
+                    $recentActivity = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 }
                 $view = __DIR__ . '/../Views/admin/dashboard_club.php';
             }
         } catch (Exception $e) {
-            // Hata durumunda loglanabilir
+            error_log("Dashboard Hatası: " . $e->getMessage());
         }
 
+        // View'a gönderilen data paketi
         $data = [
             'role' => $role,
             'name' => $name,
             'stats' => $stats,
-            'criticalClubs' => $criticalClubs,
             'recentActivity' => $recentActivity,
-            'clubName' => 'Spor CRM'
+            'criticalClubs' => $criticalClubs,
+            'clubName' => $_SESSION['club_name'] ?? 'Yönetim Paneli'
         ];
 
         $this->render($view, $data);
     }
 
+    private function getScalar($sql, $params = []) {
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
+            return $stmt->fetchColumn() ?: 0;
+        } catch (Exception $e) {
+            return 0;
+        }
+    }
+
     private function render($viewPath, $data = []) {
         extract($data);
         ob_start();
-        
-        // HATA ÖNLEME: viewPath null gelirse veya dosya yoksa kontrol et
         if (!empty($viewPath) && file_exists($viewPath)) {
             include $viewPath;
         } else {
-            echo "<div class='container mt-5 alert alert-warning'>";
-            echo "<h4>Dashboard Hazırlanıyor...</h4>";
-            echo "<p>Hoş geldiniz <strong>$name</strong>. View dosyası bulunamadı veya yetki tanımlamanız eksik.</p>";
-            echo "</div>";
+            echo "Dashboard dosyası bulunamadı: " . htmlspecialchars($viewPath);
         }
-        
         $content = ob_get_clean();
         include __DIR__ . '/../Views/layouts/admin_layout.php';
     }

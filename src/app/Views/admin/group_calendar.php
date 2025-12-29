@@ -11,12 +11,15 @@ $statusColors = [
     'Cancelled' => 'bg-danger text-white',         
     'Completed' => 'bg-success text-white'         
 ];
+
+// Sayfa yönlendirmesi için grup ID'sini garantiye alıyoruz
+$groupId = $_GET['id'] ?? $groupId ?? 0;
 ?>
 
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h4 class="fw-bold text-primary">
-            <i class="fa-solid fa-calendar-day me-2"></i><?= htmlspecialchars($group['GroupName']) ?> Antrenman Takvimi
+            <i class="fa-solid fa-calendar-day me-2"></i><?= htmlspecialchars($group['GroupName'] ?? 'Grup') ?> Antrenman Takvimi
         </h4>
         <a href="index.php?page=training_groups" class="btn btn-outline-secondary btn-sm">
             <i class="fa-solid fa-arrow-left me-1"></i> Gruplara Dön
@@ -24,8 +27,14 @@ $statusColors = [
     </div>
 
     <?php if(isset($_GET['msg']) && $_GET['msg'] == 'deleted'): ?>
-        <div class="alert alert-danger py-2 small shadow-sm border-0 mb-4 animate__animated animate__fadeIn">
+        <div class="alert alert-danger py-2 small shadow-sm border-0 mb-4">
             <i class="fa-solid fa-trash-can me-2"></i> Antrenman kaydı başarıyla silindi.
+        </div>
+    <?php endif; ?>
+    
+    <?php if(isset($_GET['msg']) && $_GET['msg'] == 'updated'): ?>
+        <div class="alert alert-success py-2 small shadow-sm border-0 mb-4">
+            <i class="fa-solid fa-check me-2"></i> Durum başarıyla güncellendi.
         </div>
     <?php endif; ?>
 
@@ -41,9 +50,10 @@ $statusColors = [
                 $currentID = $s['SessionID'];
                 $label = $statusLabels[$s['Status']] ?? $s['Status'];
                 $color = $statusColors[$s['Status']] ?? 'bg-secondary';
+                $borderColor = ($s['Status'] == 'Scheduled') ? 'border-info' : (($s['Status'] == 'Cancelled') ? 'border-danger' : 'border-success');
             ?>
                 <div class="col-md-3 mb-4">
-                    <div class="card border-0 shadow-sm h-100 border-top border-4 <?= $s['Status'] == 'Scheduled' ? 'border-info' : ($s['Status'] == 'Cancelled' ? 'border-danger' : 'border-success') ?>">
+                    <div class="card border-0 shadow-sm h-100 border-top border-4 <?= $borderColor ?>">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <span class="fw-bold fs-5 text-dark"><?= date('d.m.Y', strtotime($s['TrainingDate'])) ?></span>
@@ -75,7 +85,9 @@ $statusColors = [
                                 <a href="index.php?page=attendance&session_id=<?= $currentID ?>" class="btn btn-sm btn-success <?= $s['Status'] == 'Cancelled' ? 'disabled' : '' ?>">
                                     <i class="fa-solid fa-clipboard-check me-1"></i> Yoklama Al
                                 </a>
-                                <button type="button" onclick="openStatusModal('<?= $currentID ?>', '<?= $s['Status'] ?>', '<?= htmlspecialchars($s['Note'] ?? '', ENT_QUOTES) ?>')" class="btn btn-sm btn-outline-dark">
+                                <button type="button" 
+                                        onclick="openStatusModal('<?= $currentID ?>', '<?= $s['Status'] ?>', '<?= htmlspecialchars($s['Note'] ?? '', ENT_QUOTES) ?>')" 
+                                        class="btn btn-sm btn-outline-dark">
                                     <i class="fa-solid fa-pen-to-square me-1"></i> Durumu Yönet
                                 </button>
                             </div>
@@ -86,10 +98,12 @@ $statusColors = [
         <?php endif; ?>
     </div>
 </div>
+
 <div class="modal fade" id="statusModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <form action="index.php?page=update_session_status&group_id=<?= $groupId ?>" method="POST" class="modal-content border-0 shadow-lg">
-            <div class="modal-header bg-dark text-white border-0">
+    <form action="index.php?page=update_session_status&group_id=<?= $groupId ?>" method="POST" class="modal-content border-0 shadow-lg">
+       
+           <div class="modal-header bg-dark text-white border-0">
                 <h5 class="modal-title fw-bold">Antrenman Durumu</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -113,26 +127,26 @@ $statusColors = [
             </div>
             <div class="modal-footer border-0 bg-light text-end">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Vazgeç</button>
-                <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold shadow-sm">Kaydet</button>
+                <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold shadow-sm">Değişiklikleri Kaydet</button>
             </div>
         </form>
     </div>
 </div>
 
 <script>
-// Sayfa içinde tek bir modal instance'ı kullanmak daha sağlıklıdır
-let myStatusModal = null;
-
+/**
+ * Modalı güvenli bir şekilde açar ve değerleri atar.
+ * getOrCreateInstance kullanımı sayesinde butonun tepki vermeme sorunu çözülür.
+ */
 function openStatusModal(id, status, note) {
-    // Değerleri form içine doldur
+    // 1. Form alanlarını doldur
     document.getElementById('modal_session_id').value = id;
     document.getElementById('modal_status').value = status;
     document.getElementById('modal_note').value = note;
     
-    // Modalı aç
-    if (!myStatusModal) {
-        myStatusModal = new bootstrap.Modal(document.getElementById('statusModal'));
-    }
-    myStatusModal.show();
+    // 2. Bootstrap Modal nesnesini al veya oluştur, sonra göster
+    const modalElement = document.getElementById('statusModal');
+    const modalInstance = bootstrap.Modal.getOrCreateInstance(modalElement);
+    modalInstance.show();
 }
 </script>
