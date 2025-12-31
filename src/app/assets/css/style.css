@@ -1,0 +1,54 @@
+:root {
+    --primary-color: #0d6efd;
+    --success-color: #22c55e;
+    --danger-color: #ef4444;
+    --bg-light: #f8fafc;
+    --sidebar-width: 260px;
+}
+
+body {
+    background-color: var(--bg-light);
+    font-family: 'Inter', sans-serif;
+    overflow-x: hidden;
+}
+
+/* --- MOBİL MENÜ MANTIĞI --- */
+#sidebar {
+    width: var(--sidebar-width);
+    height: 100vh;
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 1000;
+    transition: all 0.3s;
+    background: #1e293b;
+}
+
+#content {
+    width: calc(100% - var(--sidebar-width));
+    margin-left: var(--sidebar-width);
+    transition: all 0.3s;
+}
+
+/* Mobil Ekranlarda (992px altı) Sidebar'ı Gizle */
+@media (max-width: 991.98px) {
+    #sidebar {
+        left: -var(--sidebar-width);
+    }
+    #sidebar.active {
+        left: 0;
+    }
+    #content {
+        width: 100%;
+        margin-left: 0;
+    }
+    #content.active {
+        margin-left: var(--sidebar-width);
+    }
+}
+
+/* Kare Şema ve Buton Stillleri (Ortak Kullanım) */
+.status-sq { width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+.st-v { background: var(--success-color); color: white; }
+.st-y { background: var(--danger-color); color: white; }
+.st-n { background: #e2e8f0; color: #94a3b8; }

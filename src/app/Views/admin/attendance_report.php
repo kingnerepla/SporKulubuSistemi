@@ -1,99 +1,183 @@
-<div class="container-fluid px-4 mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3 class="fw-bold"><i class="fa-solid fa-chart-line text-primary me-2"></i>Aylık Yoklama Raporu</h3>
-    </div>
+<?php
+// Ay ve Yıl değişkenleri yoksa bugüne ayarla
+$month = $month ?? date('m');
+$year = $year ?? date('Y');
+$daysInMonth = $daysInMonth ?? date('t', strtotime("$year-$month-01"));
 
-    <div class="card shadow-sm border-0 mb-4">
-        <div class="card-body">
-            <form action="index.php" method="GET" class="row g-3">
-                <input type="hidden" name="page" value="attendance_report">
-                <div class="col-md-4">
-                    <label class="form-label small fw-bold">Grup Seçin</label>
-                    <select name="group_id" class="form-select shadow-sm" required>
-                        <option value="">-- Grup Seçiniz --</option>
-                        <?php foreach($groups as $g): ?>
-                            <option value="<?= $g['GroupID'] ?>" <?= ($selectedGroup == $g['GroupID']) ? 'selected' : '' ?>>
-                                <?= htmlspecialchars($g['GroupName']) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label small fw-bold">Ay Seçin</label>
-                    <input type="month" name="month" class="form-control shadow-sm" value="<?= $selectedMonth ?>">
-                </div>
-                <div class="col-md-4 d-flex align-items-end">
-                    <button type="submit" class="btn btn-primary w-100 shadow-sm">
-                        <i class="fa-solid fa-magnifying-glass me-2"></i>Raporu Getir
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <?php if ($selectedGroup): ?>
-    <div class="card shadow-sm border-0">
-        <div class="card-header bg-white py-3">
-            <div class="d-flex justify-content-between align-items-center">
-                <span class="small fw-bold text-muted">Açıklama: 
-                    <i class="fa-solid fa-circle text-success ms-2"></i> Geldi 
-                    <i class="fa-solid fa-circle text-danger ms-2"></i> Gelmedi 
-                    <span class="ms-2">(-) Yoklama Alınmadı</span>
-                </span>
-                <button onclick="window.print()" class="btn btn-sm btn-outline-secondary">
-                    <i class="fa-solid fa-print me-1"></i> Yazdır / PDF
-                </button>
-            </div>
-        </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-bordered table-sm align-middle mb-0 report-table">
-                    <thead class="bg-light">
-                        <tr>
-                            <th class="ps-3 border-end" style="min-width: 180px;">Öğrenci Ad Soyad</th>
-                            <?php for($i=1; $i<=$daysInMonth; $i++): ?>
-                                <th class="text-center p-1" style="width: 30px; font-size: 10px;"><?= $i ?></th>
-                            <?php endfor; ?>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach($reportData as $name => $days): ?>
-                        <tr>
-                            <td class="ps-3 fw-bold small border-end"><?= htmlspecialchars($name) ?></td>
-                            <?php for($i=1; $i<=$daysInMonth; $i++): ?>
-                                <td class="text-center p-0" style="height: 35px;">
-                                    <?php 
-                                        if (isset($days[$i])) {
-                                            if ($days[$i] == 1) 
-                                                echo '<i class="fa-solid fa-circle text-success" style="font-size: 12px;"></i>';
-                                            else 
-                                                echo '<i class="fa-solid fa-circle text-danger" style="font-size: 12px;"></i>';
-                                        } else {
-                                            echo '<small class="text-muted" style="font-size: 10px;">-</small>';
-                                        }
-                                    ?>
-                                </td>
-                            <?php endfor; ?>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    <?php else: ?>
-        <div class="alert alert-info text-center shadow-sm border-0">
-            <i class="fa-solid fa-info-circle me-2"></i> Lütfen raporunu görmek istediğiniz grubu ve ayı seçiniz.
-        </div>
-    <?php endif; ?>
-</div>
+// Hata Ayıklama: Eğer veri boş gelirse örnek veri oluştur (Tasarımı görmek için)
+if (!isset($reportMatrix) || empty($reportMatrix)) {
+    $reportMatrix = [
+        ['FullName' => 'Örnek Sporcu 1', 'presentCount' => 5, 'days' => array_fill(1, $daysInMonth, 1)],
+        ['FullName' => 'Örnek Sporcu 2', 'presentCount' => 3, 'days' => array_fill(1, $daysInMonth, 0)],
+    ];
+}
+?>
 
 <style>
-    .report-table th, .report-table td { border-color: #f1f1f1 !important; }
-    .report-table tbody tr:hover { background-color: #fbfbfb; }
-    @media print {
-        .btn, form, .card-header { display: none !important; }
-        .card { border: none !important; box-shadow: none !important; }
-        .table-responsive { overflow: visible !important; }
+    /* Kart ve Genel Yapı */
+    .student-card { 
+        background: #ffffff; 
+        border-radius: 16px; 
+        border: 1px solid #eef2f6; 
+        margin-bottom: 25px; 
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); 
+        overflow: hidden;
+    }
+    
+    .card-header-custom { 
+        padding: 15px 20px; 
+        background: #f8fafc; 
+        border-bottom: 1px solid #e2e8f0; 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center;
+    }
+
+    /* Haftalık Gruplandırma (Mobil Uyumlu Flex) */
+    .weeks-container { 
+        display: flex; 
+        flex-wrap: wrap; /* Mobilde alta geçmeyi sağlar */
+        gap: 12px; 
+        padding: 15px; 
+        background: #ffffff;
+    }
+
+    .week-box { 
+        border: 1px solid #f1f5f9; 
+        border-radius: 12px; 
+        padding: 12px; 
+        flex: 1; 
+        min-width: 280px; /* Tablet ve Mobilde genişliği zorlar */
+        max-width: 100%;
+        background: #fafbfc;
+    }
+
+    .week-title {
+        font-size: 10px;
+        font-weight: 800;
+        color: #94a3b8;
+        text-transform: uppercase;
+        margin-bottom: 10px;
+        display: block;
+        text-align: center;
+    }
+
+    /* 7 Günlük Kare Grid */
+    .days-grid { 
+        display: grid; 
+        grid-template-columns: repeat(7, 1fr); 
+        gap: 8px; 
+    }
+
+    /* Durum Kareleri */
+    .status-sq { 
+        width: 100%; 
+        aspect-ratio: 1 / 1; /* Tam kare olmasını sağlar */
+        max-width: 38px;
+        margin: 0 auto;
+        border-radius: 8px; 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        font-size: 12px; 
+        color: white; 
+        position: relative; 
+        transition: transform 0.2s;
+    }
+
+    .st-v { background: #22c55e; box-shadow: 0 2px 4px rgba(34, 197, 94, 0.2); } /* Var */
+    .st-y { background: #ef4444; box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2); } /* Yok */
+    .st-n { background: #f1f5f9; color: #cbd5e1; border: 1px dashed #cbd5e1; } /* Kayıt Yok */
+
+    .d-n { 
+        position: absolute; 
+        top: 2px; 
+        right: 3px; 
+        font-size: 8px; 
+        font-weight: bold;
+        opacity: 0.6; 
+    }
+
+    .day-name { font-size: 9px; font-weight: 600; color: #64748b; margin-bottom: 4px; }
+    .weekend { color: #f87171 !important; }
+
+    /* Mobil İnce Ayar */
+    @media (max-width: 576px) {
+        .week-box { min-width: 100%; } 
+        .status-sq { max-width: 45px; font-size: 14px; }
     }
 </style>
+
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="fw-bold m-0"><i class="fas fa-th-large text-primary me-2"></i>Aylık Devam Çizelgesi</h4>
+        <div class="badge bg-white text-dark border px-3 py-2 rounded-pill shadow-sm">
+            <i class="far fa-calendar-alt me-1"></i> <?= $month ?>. Ay / <?= $year ?>
+        </div>
+    </div>
+
+    <?php foreach($reportMatrix as $student): ?>
+    <div class="student-card">
+        <div class="card-header-custom">
+            <span class="fw-bold text-dark"><i class="fas fa-user-circle me-2 text-secondary"></i><?= htmlspecialchars($student['FullName']) ?></span>
+            <span class="badge bg-soft-success text-success border border-success px-3 py-2 rounded-pill" style="background: #f0fdf4;">
+                <?php 
+                    $totalSessions = count(array_filter($student['days'], function($val) { return $val !== null; }));
+                    $rate = ($totalSessions > 0) ? round(($student['presentCount'] / $totalSessions) * 100) : 0;
+                ?>
+                Katılım: %<?= $rate ?>
+            </span>
+        </div>
+        
+        <div class="weeks-container">
+            <?php 
+            $currentWeek = [];
+            for($d = 1; $d <= $daysInMonth; $d++) {
+                $ts = strtotime("$year-$month-$d");
+                $dow = date('N', $ts); 
+                $currentWeek[] = ['d' => $d, 'dow' => $dow, 'ts' => $ts];
+
+                // Pazar günü (7) bittiyse veya ayın son günü ise haftayı kapat
+                if ($dow == 7 || $d == $daysInMonth) {
+                    echo '<div class="week-box">';
+                    echo '<span class="week-title">Hafta ' . date('W', $currentWeek[0]['ts']) . '</span>';
+                    echo '<div class="days-grid">';
+                    
+                    // Ayın ilk haftası için boşluk doldurma (Pazartesi değilse)
+                    if ($d <= 7) {
+                        $firstDayDow = date('N', strtotime("$year-$month-01"));
+                        for($i = 1; $i < $firstDayDow; $i++) echo '<div></div>';
+                    }
+
+                    foreach($currentWeek as $day) {
+                        $status = $student['days'][$day['d']] ?? null;
+                        $isWeekend = ($day['dow'] >= 6);
+                        ?>
+                        <div class="text-center">
+                            <div class="day-name <?= $isWeekend ? 'weekend' : '' ?>"><?= mb_substr(date('D', $day['ts']), 0, 2) ?></div>
+                            <div class="status-sq <?= ($status !== null) ? ($status == 1 ? 'st-v' : 'st-y') : 'st-n' ?>">
+                                <span class="d-n"><?= $day['d'] ?></span>
+                                <?php if($status !== null): ?>
+                                    <i class="fas <?= $status == 1 ? 'fa-check' : 'fa-times' ?>"></i>
+                                <?php else: ?>
+                                    <small style="font-size: 8px;">•</small>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <?php
+                    }
+                    echo '</div></div>';
+                    $currentWeek = [];
+                }
+            }
+            ?>
+        </div>
+    </div>
+    <?php endforeach; ?>
+
+    <div class="d-flex justify-content-center gap-4 mt-2 mb-5 small fw-bold text-muted text-uppercase" style="letter-spacing: 1px;">
+        <span><i class="fas fa-square text-success me-1"></i> Var</span>
+        <span><i class="fas fa-square text-danger me-1"></i> Yok</span>
+        <span><i class="fas fa-square text-light border me-1"></i> Kayıt Yok</span>
+    </div>
+</div>

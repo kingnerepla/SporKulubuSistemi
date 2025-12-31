@@ -1,151 +1,195 @@
 <div class="container-fluid px-4 mt-4">
-    <div class="card shadow mb-4 border-0">
-        <div class="card-header py-3 d-flex justify-content-between align-items-center bg-primary text-white shadow-sm">
-            <h6 class="m-0 font-weight-bold">
-                <i class="fas fa-clipboard-check mr-2"></i>
-                <?php echo htmlspecialchars($session['GroupName']); ?> - Yoklama Listesi
-            </h6>
-            <div class="d-flex align-items-center">
-                <?php if (!$isEditable): ?>
-                    <span class="badge bg-warning text-dark me-2">
-                        <i class="fas fa-lock mr-1"></i> Salt Okunur (Geçmiş)
-                    </span>
-                <?php endif; ?>
-                <span class="badge bg-white text-primary">
-                    <i class="fas fa-calendar-alt mr-1"></i>
-                    <?php echo date('d.m.Y', strtotime($date)); ?>
-                </span>
-            </div>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="fw-bold text-dark mb-0">
+                <i class="fas fa-clipboard-check text-primary me-2"></i>
+                <?php echo htmlspecialchars($session['GroupName']); ?>
+            </h4>
+            <span class="badge bg-light text-muted border mt-1">Grup Yoklama Listesi</span>
         </div>
+        <div class="card border-0 shadow-sm px-3 py-2 bg-white text-center">
+            <small class="text-uppercase fw-bold text-muted" style="font-size: 10px;">Antrenman Tarihi</small>
+            <div class="fw-bold text-primary"><?php echo date('d.m.Y', strtotime($date)); ?></div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 rounded-lg">
         <div class="card-body p-0">
-            <form action="index.php?page=attendance_save" method="POST">
+            <form action="index.php?page=attendance_save" method="POST" id="attendanceForm">
                 <input type="hidden" name="group_id" value="<?php echo $session['GroupID']; ?>">
                 <input type="hidden" name="club_id" value="<?php echo $session['ClubID']; ?>">
                 <input type="hidden" name="date" value="<?php echo $date; ?>">
                 <input type="hidden" name="session_id" value="<?php echo $sessionId; ?>">
 
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0 align-middle">
-                        <thead class="bg-light text-dark small text-uppercase">
-                            <tr>
-                                <th class="ps-4">Sporcu Bilgileri</th>
-                                <th class="text-center" style="width: 180px;">Yoklama Durumu</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php if (!empty($students)): ?>
-                                <?php foreach ($students as $std): ?>
-                                    <tr <?php echo (!$isEditable) ? 'class="bg-light-subtle"' : ''; ?>>
-                                        <td class="ps-4">
-                                            <div class="d-flex align-items-center">
-                                                <div class="me-3">
-                                                    <div class="fw-bold text-dark d-flex align-items-center">
-                                                        <?php echo htmlspecialchars($std['FullName']); ?>
-                                                        
-                                                        <?php if (!empty($std['Notes'])): ?>
-                                                            <i class="fas fa-exclamation-circle text-danger ms-2 cursor-pointer" 
-                                                               data-bs-toggle="tooltip" 
-                                                               data-bs-html="true"
-                                                               title="<div class='text-start small'><b>Eğitmen Notu:</b><br><?php echo htmlspecialchars($std['Notes']); ?></div>">
-                                                            </i>
-                                                        <?php endif; ?>
-                                                    </div>
-                                                    <div class="text-muted small">
-                                                        <?php 
-                                                            if(!empty($std['BirthDate'])) {
-                                                                $age = date_diff(date_create($std['BirthDate']), date_create('today'))->y;
-                                                                echo '<i class="fas fa-birthday-cake fa-xs me-1"></i>' . $age . ' Yaş';
-                                                            } else {
-                                                                echo 'ID: #' . $std['StudentID'];
-                                                            }
-                                                        ?>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td class="text-center">
-                                            <div class="custom-control custom-switch custom-switch-lg">
-                                                <input type="checkbox" 
-                                                       class="custom-control-input" 
-                                                       id="status_<?php echo $std['StudentID']; ?>" 
-                                                       name="status[<?php echo $std['StudentID']; ?>]" 
-                                                       value="1" 
-                                                       <?php echo ($std['CurrentStatus'] == 1) ? 'checked' : ''; ?>
-                                                       <?php echo (!$isEditable) ? 'disabled' : ''; ?>>
-                                                <label class="custom-control-label d-block" for="status_<?php echo $std['StudentID']; ?>">
-                                                    <span class="status-label-text small fw-bold"></span>
-                                                </label>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            <?php else: ?>
-                                <tr>
-                                    <td colspan="2" class="text-center py-5 text-muted">
-                                        <i class="fas fa-users-slash fa-3x mb-3 opacity-25"></i>
-                                        <p>Bu grupta kayıtlı aktif öğrenci bulunamadı.</p>
-                                    </td>
-                                </tr>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
+                <div class="attendance-list">
+                    <?php if (!empty($students)): ?>
+                        <?php foreach ($students as $index => $std): ?>
+                            <?php 
+                                // Varsayılan durum: 1 (Var) kabul edelim eğer veri yoksa
+                                $currentStatus = ($std['CurrentStatus'] === null) ? 1 : $std['CurrentStatus'];
+                                $btnClass = ($currentStatus == 1) ? 'btn-success' : 'btn-danger';
+                                $btnText = ($currentStatus == 1) ? 'GELDİ' : 'GELMEDİ';
+                                $btnIcon = ($currentStatus == 1) ? 'fa-check' : 'fa-times';
+                            ?>
+                            <div class="attendance-row d-flex align-items-center justify-content-between p-3 border-bottom <?php echo (!$isEditable) ? 'bg-light' : ''; ?>">
+                                
+                                <div class="d-flex align-items-center">
+                                    <div class="avatar-num me-3"><?php echo $index + 1; ?></div>
+                                    <div>
+                                        <div class="fw-bold text-dark fs-6">
+                                            <?php echo htmlspecialchars($std['FullName']); ?>
+                                        </div>
+                                        <div class="text-muted small">
+                                            <?php echo !empty($std['BirthDate']) ? date_diff(date_create($std['BirthDate']), date_create('today'))->y . ' Yaş' : 'Sporcu'; ?>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="attendance-action">
+                                    <input type="hidden" 
+                                        name="status[<?php echo $std['StudentID']; ?>]" 
+                                        id="input_<?php echo $std['StudentID']; ?>" 
+                                        value="<?php echo $currentStatus; ?>">
+                                    
+                                    <button type="button" 
+                                            id="btn_<?php echo $std['StudentID']; ?>"
+                                            class="icon-toggle-btn <?php echo ($currentStatus == 1) ? 'is-present' : 'is-absent'; ?>"
+                                            onclick="toggleAttendance('<?php echo $std['StudentID']; ?>')"
+                                            <?php echo (!$isEditable) ? 'disabled' : ''; ?>>
+                                        <div class="toggle-track"></div>
+                                        <div class="toggle-thumb">
+                                            <i class="fas <?php echo ($currentStatus == 1) ? 'fa-check' : 'fa-times'; ?>"></i>
+                                        </div>
+                                    </button>
+                                </div>  
+                            </div>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <div class="text-center py-5">
+                            <i class="fas fa-users-slash fa-3x text-light mb-3"></i>
+                            <p class="text-muted">Öğrenci bulunamadı.</p>
+                        </div>
+                    <?php endif; ?>
                 </div>
 
-                <div class="p-4 bg-light d-flex justify-content-between align-items-center border-top">
-                    <a href="index.php?page=dashboard" class="btn btn-outline-secondary px-4">
-                        <i class="fas fa-arrow-left mr-1"></i> İptal ve Geri Dön
-                    </a>
-
+                <div class="card-footer bg-white p-4 d-flex justify-content-between">
+                    <a href="index.php?page=dashboard" class="btn btn-light border px-4">İptal</a>
                     <?php if ($isEditable): ?>
-                        <button type="submit" class="btn btn-success btn-lg px-5 shadow">
-                            <i class="fas fa-save mr-1"></i> Yoklamayı Tamamla
+                        <button type="submit" class="btn btn-primary btn-lg px-5 shadow fw-bold">
+                            <i class="fas fa-save me-2"></i>DEĞİŞİKLİKLERİ KAYDET
                         </button>
-                    <?php else: ?>
-                        <div class="text-muted small bg-white p-2 border rounded shadow-sm">
-                            <i class="fas fa-info-circle text-warning me-1"></i> Geçmiş tarihli kayıtlar antrenörler tarafından değiştirilemez.
-                        </div>
                     <?php endif; ?>
                 </div>
             </form>
         </div>
     </div>
 </div>
+<style>
+.icon-toggle-btn {
+    position: relative;
+    width: 75px; /* Sabit Genişlik */
+    height: 38px;
+    border-radius: 50px;
+    border: none;
+    outline: none;
+    cursor: pointer;
+    background-color: transparent;
+    padding: 0;
+    transition: all 0.4s ease;
+}
 
+/* Arka Plan Kanalı */
+.toggle-track {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    border-radius: 50px;
+    transition: all 0.4s ease;
+    border: 2px solid transparent;
+}
+
+/* Hareketli Yuvarlak (Başlık) */
+.toggle-thumb {
+    position: absolute;
+    top: 4px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background-color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    z-index: 2;
+}
+
+/* VAR Durumu (Yeşil) */
+.icon-toggle-btn.is-present .toggle-track {
+    background-color: #f0fdf4;
+    border-color: #22c55e;
+}
+.icon-toggle-btn.is-present .toggle-thumb {
+    left: 4px;
+    color: #22c55e;
+}
+
+/* YOK Durumu (Kırmızı) */
+.icon-toggle-btn.is-absent .toggle-track {
+    background-color: #fef2f2;
+    border-color: #ef4444;
+}
+.icon-toggle-btn.is-absent .toggle-thumb {
+    left: calc(100% - 34px); /* Sağa kaydır */
+    color: #ef4444;
+}
+
+/* Basma Efekti */
+.icon-toggle-btn:active .toggle-thumb {
+    transform: scale(0.9);
+}
+</style>
 <script>
-// Tooltip'leri aktif et
-$(function () {
-    $('[data-bs-toggle="tooltip"]').tooltip()
-})
+$(document).ready(function() {
+    $('.btn-toggle-status').on('click', function() {
+        const studentId = $(this).data('student-id');
+        const input = $('#input_' + studentId);
+        const btn = $(this);
+        const icon = btn.find('i');
+        const text = btn.find('span');
+
+        if (input.val() == "1") {
+            // "Var"dan "Yok"a çek
+            input.val("0");
+            btn.removeClass('btn-success').addClass('btn-danger');
+            icon.removeClass('fa-check').addClass('fa-times');
+            text.text('GELMEDİ');
+        } else {
+            // "Yok"tan "Var"a çek
+            input.val("1");
+            btn.removeClass('btn-danger').addClass('btn-success');
+            icon.removeClass('fa-times').addClass('fa-check');
+            text.text('GELDİ');
+        }
+    });
+});
 </script>
 
-<style>
-/* İkon Ayarı */
-.cursor-pointer { cursor: help; }
+<script>
+function toggleAttendance(studentId) {
+    const input = document.getElementById('input_' + studentId);
+    const btn = document.getElementById('btn_' + studentId);
+    const icon = btn.querySelector('.toggle-circle i');
 
-/* Modern ve büyük Switch tasarımı */
-.custom-switch-lg .custom-control-label::before {
-    height: 2.2rem;
-    width: 4rem;
-    border-radius: 2rem;
-    cursor: pointer;
+    if (input.value == "1") {
+        input.value = "0";
+        btn.classList.remove('is-present');
+        btn.classList.add('is-absent');
+        icon.classList.replace('fa-check', 'fa-times');
+    } else {
+        input.value = "1";
+        btn.classList.remove('is-absent');
+        btn.classList.add('is-present');
+        icon.classList.replace('fa-times', 'fa-check');
+    }
 }
-.custom-switch-lg .custom-control-label::after {
-    width: calc(2.2rem - 4px);
-    height: calc(2.2rem - 4px);
-    border-radius: 2rem;
-    cursor: pointer;
-}
-.custom-switch-lg .custom-control-input:checked ~ .custom-control-label::after {
-    transform: translateX(1.8rem);
-}
-.custom-switch-lg .custom-control-input:checked ~ .custom-control-label::before {
-    background-color: #28a745;
-    border-color: #28a745;
-}
-
-/* Switch içindeki metin durumu (isteğe bağlı) */
-.custom-switch-lg .custom-control-label::before { content: ""; }
-
-.bg-light-subtle { background-color: #f8f9fa; }
-.table-hover tbody tr:hover { background-color: rgba(0,0,0,.02); }
-</style>
+</script>

@@ -123,32 +123,57 @@ class AttendanceController {
         }
     }
     public function report() {
-        $db = (new Database())->getConnection();
-        $clubId = $_SESSION['club_id'];
-        $role = trim(strtolower($_SESSION['role'] ?? ''));
+        $month = $_GET['month'] ?? date('m');
+        $year  = $_GET['year']  ?? date('Y');
+        $clubId = $_SESSION['club_id'] ?? 1;
+        $daysInMonth = date('t', strtotime("$year-$month-01"));
     
-        // 1. Kulübün antrenör yetkisini kontrol et
-        $stmtClub = $db->prepare("SELECT CoachReportAccess FROM Clubs WHERE ClubID = ?");
-        $stmtClub->execute([$clubId]);
-        $clubSettings = $stmtClub->fetch(PDO::FETCH_ASSOC);
+        try {
+            $sqlStudents = "SELECT UserID, FullName FROM Users WHERE RoleID = 5 AND IsActive = 1 AND ClubID = ?";
+            $stmt = $this->db->prepare($sqlStudents);
+            $stmt->execute([$clubId]);
+            $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-        // 2. YETKİ KONTROLÜ
-        if ($role !== 'admin') { // Eğer admin değilse (yani antrenörse)
-            if ($role === 'coach') {
-                // Kulüp ayarı kapalıysa antrenörü engelle
-                if (($clubSettings['CoachReportAccess'] ?? 0) == 0) {
-                    header("Location: index.php?page=dashboard&error=no_access");
-                    exit;
-                }
-            } else {
-                // Başka bir rol (veli vs.) zaten göremez
-                header("Location: index.php?page=dashboard");
-                exit;
+            $sqlAttendance = "SELECT StudentID, DAY(AttendanceDate) as DayNum, Status 
+                              FROM Attendance 
+                              WHERE MONTH(AttendanceDate) = ? AND YEAR(AttendanceDate) = ? AND ClubID = ?";
+            $stmt = $this->db->prepare($sqlAttendance);
+            $stmt->execute([$month, $year, $clubId]);
+            $attendanceData = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+            $reportMatrix = [];
+            foreach ($students as $s) {
+                $reportMatrix[$s['UserID']] = [
+                    'FullName' => $s['FullName'],
+                    'days' => array_fill(1, $daysInMonth, null),
+                    'presentCount' => 0
+                ];
             }
-        }
     
-        // --- Buradan sonrası mevcut rapor kodların ---
-        // Eğer antrenörse SQL'e "AND CoachID = ?" ekleyerek sadece kendi grubunu görmesini sağlayacağız
+            foreach ($attendanceData as $a) {
+                if (isset($reportMatrix[$a['StudentID']])) {
+                    $reportMatrix[$a['StudentID']]['days'][$a['DayNum']] = $a['Status'];
+                    if ($a['Status'] == 1) {
+                        $reportMatrix[$a['StudentID']]['presentCount']++;
+                    }
+                }
+            }
+    
+            // VERİLERİ PAKETLE
+            $data = [
+                'reportMatrix' => $reportMatrix, // View'da bu isimle döneceğiz
+                'daysInMonth'  => (int)$daysInMonth,
+                'month'        => (int)$month,
+                'year'         => (int)$year
+            ];
+    
+            // RENDER ET
+            $this->render('attendance_report', $data);
+    
+        } catch (Exception $e) {
+            error_log("Rapor Hatası: " . $e->getMessage());
+            die("Rapor yüklenirken hata oluştu.");
+        }
     }
     private function render($view, $data = []) {
         extract($data);
