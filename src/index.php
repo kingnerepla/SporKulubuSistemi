@@ -111,28 +111,19 @@ switch ($page) {
     case 'club_finance':     safe_load('ClubFinanceController', 'index'); break;
     // MEVCUT case 'payments' SATIRINI SİL, BUNU YAPIŞTIR:
     
-        case 'payments':
-            // 1. Hataları Açalım
-            ini_set('display_errors', 1);
-            error_reporting(E_ALL);
-            
-            // 2. Dosya Yolunu Belirle (Büyük/Küçük harf denemesi)
-            $path1 = __DIR__ . '/app/Controllers/PaymentController.php';
-            
-            if (file_exists($path1)) {
-                require_once $path1;
-                
-                // 3. Sınıfı Başlat
-                if (class_exists('PaymentController')) {
-                    $controller = new PaymentController();
-                    $controller->index();
-                } else {
-                    die("<h1 style='color:red'>HATA: Dosya bulundu ama 'PaymentController' sınıfı içinde yok!</h1>");
-                }
-            } else {
-                die("<h1 style='color:red'>HATA: Dosya Bulunamadı!</h1><br>Aranan yol: $path1");
-            }
-            break;
+        // MEVCUT case 'payments' SATIRINI SİLİP BUNU YAPIŞTIR:
+    case 'payments':
+        // Hataları açıyoruz ki beyaz ekran gelmesin
+        ini_set('display_errors', 1);
+        error_reporting(E_ALL);
+        
+        // Dosyayı manuel çağırıyoruz
+        require_once __DIR__ . '/app/Controllers/PaymentController.php';
+        
+        // Controller'ı başlatıyoruz
+        $controller = new PaymentController();
+        $controller->index();
+        break;
     case 'payment_store':    safe_load('PaymentController', 'store'); break; 
     case 'payment_delete':   safe_load('PaymentController', 'delete'); break;
 
