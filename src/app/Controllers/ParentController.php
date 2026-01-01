@@ -1,144 +1,154 @@
 <?php
-class ParentController {
+// 1. ADIM: Hataları Zorla Göster (Beyaz ekranı engeller)
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+class PaymentController {
     private $db;
 
     public function __construct() {
+        // Database bağlantısı kontrolü
+        if (!class_exists('Database')) {
+            die("<h3 style='color:red'>HATA: Database sınıfı yüklenemedi. index.php yapılandırmasını kontrol edin.</h3>");
+        }
         $this->db = (new Database())->getConnection();
     }
 
-    public function dashboard() {
-        // 1. Oturum Kontrolü
-        if (!isset($_SESSION['parent_logged_in']) || !isset($_SESSION['student_id'])) {
-            header("Location: index.php?page=parent_login");
-            exit;
-        }
-    
-        // HATA 1 ÇÖZÜMÜ: student_id'yi session'dan alıp değişkene tanımlıyoruz
-        $studentId = $_SESSION['student_id'];
-    
-        // 1. Öğrenci ve Grup Bilgileri
-        $stmt = $this->db->prepare("
-            SELECT s.*, g.GroupName 
-            FROM Students s 
-            LEFT JOIN Groups g ON s.GroupID = g.GroupID 
-            WHERE s.StudentID = ?
-        ");
-        $stmt->execute([$studentId]);
-        $student = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-        // 2. Ödeme Özeti
-        $stmtPay = $this->db->prepare("SELECT SUM(Amount) as total FROM Payments WHERE StudentID = ?");
-        $stmtPay->execute([$studentId]);
-        $totalPaid = $stmtPay->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
-    
-        // HATA 2 ÇÖZÜMÜ: SQL Server için COUNT field hatasını gidermek adına SUM/CASE yapısı
-        // Status = 1 ise 1 ekle, değilse 0 ekle mantığı T-SQL'de daha kararlıdır.
-        $stmtAtt = $this->db->prepare("
-            SELECT 
-                SUM(CASE WHEN Status = 1 THEN 1 ELSE 0 END) as attended,
-                SUM(CASE WHEN Status = 0 THEN 1 ELSE 0 END) as missed
-            FROM Attendance WHERE StudentID = ?
-        ");
-        $stmtAtt->execute([$studentId]);
-        $stats = $stmtAtt->fetch(PDO::FETCH_ASSOC);
-    
-        // Boş gelme ihtimaline karşı varsayılan değerler
-        $stats['attended'] = $stats['attended'] ?? 0;
-        $stats['missed'] = $stats['missed'] ?? 0;
-    
-        // 4. Son 10 Yoklama Kaydı
-        $stmtHistory = $this->db->prepare("
-            SELECT AttendanceDate, Status 
-            FROM Attendance 
-            WHERE StudentID = ? 
-            ORDER BY AttendanceDate DESC
-        ");
-        $stmtHistory->execute([$studentId]);
-        $attendanceHistory = $stmtHistory->fetchAll(PDO::FETCH_ASSOC);
-    
-        // View'a gönder
-        include __DIR__ . '/../Views/parent/parent_dashboard.php';
-    }
     public function index() {
-        $db = (new Database())->getConnection();
-        $parentId = $_SESSION['user_id'];
-        $clubId = $_SESSION['club_id'];
-    
-        // 1. Veliye ait öğrencileri ve gruplarını çek
-        $sql = "SELECT s.StudentID, s.FullName, g.GroupName, g.GroupID 
-                FROM Students s 
-                LEFT JOIN Groups g ON s.GroupID = g.GroupID 
-                WHERE s.ParentID = ? AND s.ClubID = ?";
-        $stmt = $db->prepare($sql);
-        $stmt->execute([$parentId, $clubId]);
-        $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-        // 2. Her öğrenci için son 5 yoklamayı ve genel katılım oranını çek
-        foreach ($students as &$student) {
-            $stmtA = $db->prepare("SELECT TOP 5 AttendanceDate, Status FROM Attendance WHERE StudentID = ? ORDER BY AttendanceDate DESC");
-            $stmtA->execute([$student['StudentID']]);
-            $student['last_attendance'] = $stmtA->fetchAll(PDO::FETCH_ASSOC);
+        $clubId = $_SESSION['selected_club_id'] ?? $_SESSION['club_id'] ?? null;
+        $studentFilter = $_GET['student_id'] ?? null;
+
+        // Session mesajlarını al
+        $errorMessage = $_SESSION['error_message'] ?? null;
+        $successMessage = $_SESSION['success_message'] ?? null;
+        unset($_SESSION['error_message'], $_SESSION['success_message']);
+
+        try {
+            // Veri Çekme İşlemleri
+            $sql = "SELECT p.*, s.FullName as StudentName, g.GroupName 
+                    FROM Payments p 
+                    INNER JOIN Students s ON p.StudentID = s.StudentID 
+                    LEFT JOIN Groups g ON s.GroupID = g.GroupID 
+                    WHERE p.ClubID = ?";
+            
+            if ($studentFilter) { 
+                $sql .= " AND p.StudentID = " . (int)$studentFilter; 
+            }
+            $sql .= " ORDER BY p.PaymentDate DESC";
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$clubId]);
+            $payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $totalIncome = 0;
+            foreach ($payments as $pay) { $totalIncome += (float)$pay['Amount']; }
+
+            $stmtSt = $this->db->prepare("SELECT StudentID, FullName, MonthlyFee FROM Students WHERE ClubID = ? AND IsActive = 1");
+            $stmtSt->execute([$clubId]);
+            $students = $stmtSt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Verileri Render Metoduna Gönder
+            $this->render('payments', [
+                'payments' => $payments,
+                'totalIncome' => $totalIncome,
+                'students' => $students,
+                'error' => $errorMessage,
+                'success' => $successMessage
+            ]);
+
+        } catch (Exception $e) {
+            die("<h3 style='color:red'>SQL Hatası: " . $e->getMessage() . "</h3>");
         }
-    
-        // 3. Basit istatistikler (Örnek veriler)
-        $attendanceRate = 92; // Hesaplama eklenebilir
-        $paymentStatus = "Güncel"; // Finans tablosundan kontrol edilecek
-    
-        $this->render('dashboard', [
-            'students' => $students,
-            'attendanceRate' => $attendanceRate,
-            'paymentStatus' => $paymentStatus
-        ]);
     }
-    public function authenticate() {
-        // app/Controllers/ParentController.php -> authenticate metodu içi
-        if ($isValid) {
-            $_SESSION['parent_logged_in'] = true; // index.php'nin beklediği anahtar
-            $_SESSION['student_id'] = $student['StudentID'];
-            $_SESSION['student_name'] = $student['FullName'];
-            
-            session_write_close();
-            header("Location: index.php?page=parent_dashboard");
-            exit;
-        }
+
+    public function store() {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $phone = trim($_POST['phone']);
-            $password = trim($_POST['password']);
-    
-            // Önemli: [Password] şeklinde köşeli parantez kullanıyoruz
-            $stmt = $this->db->prepare("SELECT StudentID, FullName, [Password] FROM Students WHERE ParentPhone = ? AND IsActive = 1");
-            $stmt->execute([$phone]);
-            $student = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-            // Şifre kontrolü (Eğer hash kullanmıyorsak direkt karşılaştırma)
-            
-            if ($student && $student['Password'] == $password) {
-                $_SESSION['parent_logged_in'] = true;
-                $_SESSION['student_id'] = $student['StudentID'];
-                $_SESSION['student_name'] = $student['FullName'];
-                header("Location: index.php?page=parent_dashboard");
-                exit;
-            } else {
-                header("Location: index.php?page=parent_login&error=1");
-                exit;
+            try {
+                $this->db->beginTransaction();
+
+                $studentId = $_POST['student_id'];
+                $amount = $_POST['amount'];
+                $nextDate = $_POST['next_payment_date']; 
+                $clubId = $_SESSION['selected_club_id'] ?? $_SESSION['club_id'];
+                $createdBy = $_SESSION['user_id'] ?? 1;
+
+                $stmt = $this->db->prepare("INSERT INTO Payments 
+                    ([StudentID], [Amount], [PaymentType], [Description], [PaymentDate], [PaymentMonth], [ClubID], [Type], [CreatedBy]) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                
+                $stmt->execute([
+                    $studentId, $amount, $_POST['payment_type'], 
+                    $_POST['description'] ?? 'Aidat Tahsilatı', 
+                    $_POST['payment_date'], $_POST['payment_month'], 
+                    $clubId, 'Collection', $createdBy
+                ]);
+
+                $stmtUpdate = $this->db->prepare("UPDATE Students SET NextPaymentDate = ? WHERE StudentID = ?");
+                $stmtUpdate->execute([$nextDate, $studentId]);
+
+                $this->db->commit();
+                
+                $_SESSION['success_message'] = "İşlem Başarılı";
+                header("Location: index.php?page=payments");
+                exit();
+
+            } catch (Exception $e) {
+                if ($this->db->inTransaction()) $this->db->rollBack();
+                $_SESSION['error_message'] = "Hata: " . $e->getMessage();
+                header("Location: index.php?page=payments");
+                exit();
             }
         }
     }
-    public function loginPage() {
-        $path = __DIR__ . '/../Views/parent/login.php';
-        if (!file_exists($path)) {
-            $path = __DIR__ . '/../../src/app/Views/parent/login.php';
-        }
-        include $path;
-    }
-    
-    public function logout() {
-        unset($_SESSION['parent_logged_in']);
-        unset($_SESSION['student_id']);
-        header("Location: index.php?page=parent_login");
-    }
+
+    /**
+     * BEYAZ EKRAN SORUNUNU ÇÖZEN RENDER METODU
+     * Dosya yollarını ekrana yazdırarak debug eder.
+     */
     private function render($view, $data = []) {
         extract($data);
-        include __DIR__ . "/../Views/parent/{$view}.php";
+        
+        // 1. View Klasörünü Tespit Et (Büyük/Küçük Harf Duyarlı)
+        // Linux sunucularda 'Views' ile 'views' farklıdır.
+        $baseDir = __DIR__ . '/../';
+        $viewFolder = is_dir($baseDir . 'Views') ? 'Views' : 'views';
+        
+        // 2. İçerik Dosyasını Bul
+        $viewPath = $baseDir . $viewFolder . "/admin/{$view}.php";
+        
+        if (!file_exists($viewPath)) {
+            // HATA VARSA EKRANA BASIYORUZ
+            echo "<div style='background:white; color:red; padding:20px; border:2px solid red;'>";
+            echo "<h1>DOSYA BULUNAMADI!</h1>";
+            echo "<p>Sistem şu dosyayı aradı ama bulamadı:</p>";
+            echo "<code>" . realpath($baseDir) . "/$viewFolder/admin/$view.php</code><br><br>";
+            echo "<strong>Kontrol Edin:</strong><br>";
+            echo "1. Klasör adınız <b>Views</b> mi yoksa <b>views</b> mi?<br>";
+            echo "2. Dosya adınız <b>payments.php</b> mi?<br>";
+            echo "</div>";
+            exit;
+        }
+
+        // 3. Layout Dosyasını Bul ve Yükle
+        $layoutPath = $baseDir . $viewFolder . '/layouts/admin_layout.php';
+        
+        if (!file_exists($layoutPath)) {
+             // Layout yoksa standart layout dene
+             $layoutPath = $baseDir . $viewFolder . '/layouts/layout.php';
+        }
+
+        // Yükleme İşlemi
+        ob_start();
+        include $viewPath;
+        $content = ob_get_clean();
+
+        if (file_exists($layoutPath)) {
+            include $layoutPath;
+        } else {
+            // Layout hiç bulunamazsa sadece içeriği ve uyarıyı bas
+            echo "<div style='background:orange; padding:10px; text-align:center;'>UYARI: Menü dosyası (admin_layout.php) bulunamadı. İçerik yalın yükleniyor.</div>";
+            echo $content;
+        }
     }
 }

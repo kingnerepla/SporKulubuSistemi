@@ -4,12 +4,13 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+// 1. Klasör Yapısı Tespiti
 if (is_dir(__DIR__ . '/src/app')) {
     $basePath = __DIR__ . '/src';
 } elseif (is_dir(__DIR__ . '/app')) {
     $basePath = __DIR__;
 } else {
-    die("Kritik Hata: 'app' klasörü ne ana dizinde ne de 'src' içinde bulunabildi.");
+    die("Kritik Hata: 'app' klasörü bulunamadı.");
 }
 
 require_once $basePath . '/app/config/Database.php';
@@ -54,104 +55,102 @@ function safe_load($controllerName, $methodName) {
             die("<b>Sınıf Hatası:</b> {$controllerName} sınıfı bulunamadı.");
         }
     } else {
-        // Hata raporlamasını tam yol vererek yapıyoruz
-        die("<b>Dosya Hatası:</b> {$controllerName}.php bulunamadı.<br>Sistemin aradığı tam yol: <code>$path</code>");
+        die("<b>Dosya Hatası:</b> {$controllerName}.php bulunamadı.<br>Yol: <code>$path</code>");
     }
 }
 
 // 5. ROTA YÖNETİMİ
-// index.php içindeki switch ($page) bloğunu bu şekilde güncelle:
+switch ($page) {
+    // --- AUTH & DASHBOARD ---
+    case 'login':            safe_load('AuthController', 'showSelection'); break;
+    case 'admin_login_form': safe_load('AuthController', 'showAdminLogin'); break;
+    case 'admin_auth':       safe_load('AuthController', 'login');  break;
+    case 'dashboard':        safe_load('DashboardController', 'index'); break;
 
-    switch ($page) {
-        // --- AUTH & GİRİŞ ---
-        case 'login':            safe_load('AuthController', 'showSelection'); break;
-        case 'admin_login_form': safe_load('AuthController', 'showAdminLogin'); break;
-        case 'admin_auth':       safe_load('AuthController', 'login');  break;
-        // --- DASHBOARD ---
-        case 'dashboard':        safe_load('DashboardController', 'index'); break;
+    // --- SÜPER ADMİN: KULÜP VE SAAS YÖNETİMİ ---
+    case 'clubs':            safe_load('ClubController', 'index'); break; 
+    case 'select_club':      safe_load('ClubController', 'selectClub'); break;
+    case 'clear_selection':  safe_load('ClubController', 'clearSelection'); break;
+    case 'club_store':       safe_load('ClubController', 'store'); break;
+    case 'update_agreement': safe_load('ClubController', 'updateAgreement'); break;
+    case 'packages':         safe_load('ClubController', 'packages'); break; 
 
-        // --- YOKLAMA VE KATILIM (AttendanceController) ---
-        case 'attendance':      safe_load('AttendanceController', 'index'); break;
-        case 'attendance_save': safe_load('AttendanceController', 'save'); break;
-        case 'delete_sessions': safe_load('GroupScheduleController', 'deleteSessions'); break;
-        case 'delete_single_session': safe_load('GroupScheduleController', 'deleteSingleSession'); break;
-        // --- KULÜP YÖNETİMİ (ClubController) ---
-        case 'club_management':  safe_load('ClubController', 'index'); break;
-        case 'club_details':     safe_load('ClubController', 'details'); break;
-        case 'club_finance':  safe_load('ClubFinanceController', 'index'); break;
-        case 'group_schedule':      safe_load('GroupScheduleController', 'edit'); break;
-        case 'group_schedule_save': safe_load('GroupScheduleController', 'save'); break;
-        case 'group_schedule_delete': safe_load('GroupScheduleController', 'delete'); break;
-        case 'save_schedule':    safe_load('GroupScheduleController', 'store'); break;
-        case 'add_schedule':     safe_load('GroupScheduleController', 'create'); break; 
-        case 'save_program':     safe_load('GroupScheduleController', 'save'); break;
-        // --- FİNANS VE ÖDEMELER (SystemFinance & Payment) ---
-        case 'system_finance':  
-            safe_load('SystemFinanceController', 'index'); 
-            break;  
-        case 'payments':         safe_load('PaymentController', 'index'); break;
-        case 'payment_add':      safe_load('PaymentController', 'create'); break;
-        case 'clubs':           safe_load('ClubController', 'index'); break;
+    // --- SÜPER ADMİN: MERKEZİ SİSTEM FİNANS ---
+    case 'system_finance':   safe_load('SystemFinanceController', 'index'); break;
+    case 'store_expense':    safe_load('SystemFinanceController', 'storeExpense'); break;
+    case 'delete_expense':   safe_load('SystemFinanceController', 'deleteExpense'); break;
 
-            // --- GRUPLAR VE TAKVİM (Group & GroupSchedule) ---
-        case 'groups':           safe_load('GroupController', 'index'); break;
-        case 'group_add':        safe_load('GroupController', 'create'); break;
-        case 'training_groups':  safe_load('GroupScheduleController', 'trainingGroups'); break;
-        case 'group_calendar':   safe_load('GroupScheduleController', 'groupCalendar'); break;
-            
-        // --- ÖĞRENCİ VE SPORCU İŞLEMLERİ (StudentController) ---
-        case 'students':         safe_load('StudentController', 'index'); break;
-        case 'student_add':      safe_load('StudentController', 'create'); break;
-        case 'student_edit':     safe_load('StudentController', 'edit'); break;
-        case 'student_update': safe_load('StudentController', 'update'); break;
-        case 'student_detail':   safe_load('StudentController', 'view'); break;
-        case 'student_store': safe_load('StudentController', 'store'); break;
-        case 'student_delete': safe_load('StudentController', 'delete'); break;
-        // --- VELİ PANELİ ---
-        case 'parent_dashboard': safe_load('ParentController', 'dashboard'); break;
-    // Antrenmanları toplu oluşturan asıl işlem rotası
-        case 'generate_sessions': safe_load('GroupScheduleController', 'generateSessions'); break;
-        // --- PROFİL VE KULLANICI YÖNETİMİ ---
-        case 'profile':          safe_load('ProfileController', 'index'); break;
-        case 'profile_update':   safe_load('ProfileController', 'update'); break;
-        case 'user_management':  safe_load('UserController', 'index'); break;
-        // --- EKSİK ROTALAR: GRUPLAR, PROGRAM VE YOKLAMA ---
-        
-        // Gruplar ve Dersler (GroupController)
-        case 'groups':           safe_load('GroupController', 'index'); break;
-        case 'lessons':          safe_load('GroupController', 'lessons'); break; // Eğer dersler ayrı bir metodsa// index.php içindeki switch($page) bloğuna ekle:
-        case 'delete_single_session': safe_load('GroupScheduleController', 'deleteSingleSession'); break;
-        case 'parent_login':     safe_load('ParentController', 'loginPage'); break;
-        // Program/Takvim Butonu (GroupScheduleController)
-        case 'schedule':         safe_load('GroupScheduleController', 'index'); break;
-        case 'program':          safe_load('GroupScheduleController', 'trainingGroups'); break;
-        // Antrenör Yönetimi
-        case 'coaches': safe_load('CoachController', 'index'); break;
-        case 'coach_add': safe_load('CoachController', 'add'); break;
-        case 'coach_save': safe_load('CoachController', 'store'); break;
-        case 'coach_delete': safe_load('CoachController', 'delete'); break;
-        case 'coach_update': safe_load('CoachController', 'update'); break;
-        case 'group_update': safe_load('GroupController', 'update'); break;
-        // Günlük Yoklama (AttendanceController)
-        // Öğrenci Arşivi ve Geri Yükleme Linkleri
-        case 'students_archived': safe_load('StudentController', 'archived'); break;
-        case 'student_restore':  safe_load('StudentController', 'restore'); break;
-        case 'parent_attendance': safe_load('ParentController', 'attendance'); break;
-        case 'parent_payments':   safe_load('ParentController', 'payments'); break;
-        case 'attendance_report': safe_load('AttendanceController', 'report'); break;
-        case 'attendance_report': safe_load('AttendanceController', 'report'); break;
-        case 'daily_attendance': safe_load('AttendanceController', 'index'); break;
-        case 'take_attendance':  safe_load('AttendanceController', 'take'); break; // Alternatif link ismi için 
-        // --- SİSTEM ÇIKIŞ ---
-        case 'logout':           
-            session_destroy(); 
-            header("Location: index.php?page=login"); 
-            exit;
+    // --- ÖĞRENCİ İŞLEMLERİ ---
+    case 'students':         safe_load('StudentController', 'index'); break;
+    case 'student_add':      safe_load('StudentController', 'create'); break;
+    case 'student_edit':     safe_load('StudentController', 'edit'); break;
+    case 'student_update':   safe_load('StudentController', 'update'); break;
+    case 'student_store':    safe_load('StudentController', 'store'); break;
+    case 'student_delete':   safe_load('StudentController', 'delete'); break;
+    case 'students_archived': safe_load('StudentController', 'archived'); break;
+    case 'student_restore':  safe_load('StudentController', 'restore'); break;
+
+    // --- GRUPLAR VE TAKVİM ---
+    case 'groups':           safe_load('GroupController', 'index'); break;
+    case 'group_add':        safe_load('GroupController', 'create'); break;
+    case 'group_update':     safe_load('GroupController', 'update'); break;
+    case 'training_groups':  safe_load('GroupScheduleController', 'trainingGroups'); break;
+    case 'generate_sessions': safe_load('GroupScheduleController', 'generateSessions'); break;
+    case 'delete_sessions':  safe_load('GroupScheduleController', 'deleteSessions'); break;
+    case 'delete_single_session': safe_load('GroupScheduleController', 'deleteSingleSession'); break;
+
+    // --- YOKLAMA ---
+    case 'attendance':       safe_load('AttendanceController', 'index'); break;
+    case 'attendance_save':  safe_load('AttendanceController', 'save'); break;
+    case 'attendance_report': safe_load('AttendanceController', 'report'); break;
+
+    // --- ANTRENÖR ---
+    case 'coaches':          safe_load('CoachController', 'index'); break;
     
-        // Tanımsız tüm sayfalar Dashboard'a döner
-        default:                
-            header("Location: index.php?page=dashboard");
+    // --- FİNANS & ÖDEMELER (BURASI DÜZENLENDİ) ---
+    case 'club_finance':     safe_load('ClubFinanceController', 'index'); break;
+    // MEVCUT case 'payments' SATIRINI SİL, BUNU YAPIŞTIR:
+    
+        case 'payments':
+            // 1. Hataları Açalım
+            ini_set('display_errors', 1);
+            error_reporting(E_ALL);
+            
+            // 2. Dosya Yolunu Belirle (Büyük/Küçük harf denemesi)
+            $path1 = __DIR__ . '/app/Controllers/PaymentController.php';
+            
+            if (file_exists($path1)) {
+                require_once $path1;
+                
+                // 3. Sınıfı Başlat
+                if (class_exists('PaymentController')) {
+                    $controller = new PaymentController();
+                    $controller->index();
+                } else {
+                    die("<h1 style='color:red'>HATA: Dosya bulundu ama 'PaymentController' sınıfı içinde yok!</h1>");
+                }
+            } else {
+                die("<h1 style='color:red'>HATA: Dosya Bulunamadı!</h1><br>Aranan yol: $path1");
+            }
             break;
-    }
+    case 'payment_store':    safe_load('PaymentController', 'store'); break; 
+    case 'payment_delete':   safe_load('PaymentController', 'delete'); break;
+
+    // --- VELİ ---
+    case 'parent_dashboard':  safe_load('ParentController', 'dashboard'); break;
+    case 'parent_attendance': safe_load('ParentController', 'attendance'); break;
+    case 'parent_payments':   safe_load('ParentController', 'payments'); break;
+
+    // --- PROFİL & SİSTEM ---
+    case 'profile':          safe_load('ProfileController', 'index'); break;
+    case 'logout':           
+        session_destroy(); 
+        header("Location: index.php?page=login"); 
+        exit;
+    
+    default:                
+        header("Location: index.php?page=dashboard");
+        break;
+}
 
 if (ob_get_level() > 0) ob_end_flush();

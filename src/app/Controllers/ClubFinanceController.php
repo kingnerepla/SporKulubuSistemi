@@ -1,172 +1,84 @@
 <?php
 
 class ClubFinanceController {
+    // 1. ÖNEMLİ: db değişkenini private olarak tanımlıyoruz
     private $db;
 
     public function __construct() {
-        $this->db = (new Database())->getConnection();
+        // 2. Database sınıfı index.php'de yüklendiği için direkt kullanıyoruz
+        // Eğer Database sınıfı bulunamazsa veya bağlantı başarısızsa hata vermesini sağlıyoruz
+        try {
+            if (class_exists('Database')) {
+                $dbInstance = new Database();
+                $this->db = $dbInstance->getConnection();
+                
+                if (!$this->db) {
+                    throw new Exception("Veritabanı bağlantısı kurulamadı (Connection Null).");
+                }
+            } else {
+                throw new Exception("Database sınıfı sistemde bulunamadı.");
+            }
+        } catch (Exception $e) {
+            die("Kritik Hata: " . $e->getMessage());
+        }
     }
 
-    // --- GENEL FİNANS LİSTESİ VE ÖZET ---
     public function index() {
-        $role = strtolower(trim($_SESSION['role'] ?? 'guest'));
-        $clubId = ($role === 'systemadmin') ? ($_SESSION['selected_club_id'] ?? null) : ($_SESSION['club_id'] ?? null);
+        $clubId = $_SESSION['selected_club_id'] ?? $_SESSION['club_id'] ?? null;
 
         if (!$clubId) {
-            die("Hata: İşlem yapmak için bir kulüp seçmelisiniz.");
+            header("Location: index.php?page=dashboard");
+            exit;
         }
-
-        // 1. Öğrenci Bakiyelerini Getir (Borçlar - Tahsilatlar)
-        // SQL Server için CASE WHEN yapısı kullanılmıştır
-        $sql = "SELECT s.StudentID, s.FullName, s.MonthlyFee, g.GroupName,
-                (SELECT SUM(CASE WHEN Type = 'Debt' THEN Amount ELSE -Amount END) 
-                 FROM StudentPayments WHERE StudentID = s.StudentID) as Balance
-                FROM Students s
-                LEFT JOIN Groups g ON s.GroupID = g.GroupID
-                WHERE s.ClubID = ? AND s.IsActive = 1";
-        
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute([$clubId]);
-        $summary = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        // 2. Kasa Özet İstatistikleri (Toplam Gelir ve Toplam Gider)
-        $sqlIncome = "SELECT SUM(Amount) as Total FROM StudentPayments WHERE ClubID = ? AND Type = 'Collection'";
-        $sqlExpense = "SELECT SUM(Amount) as Total FROM ClubExpenses WHERE ClubID = ?";
-        
-        $stmtInc = $this->db->prepare($sqlIncome); 
-        $stmtInc->execute([$clubId]);
-        $stmtExp = $this->db->prepare($sqlExpense); 
-        $stmtExp->execute([$clubId]);
-
-        $stats = [
-            'income' => $stmtInc->fetch()['Total'] ?? 0,
-            'expense' => $stmtExp->fetch()['Total'] ?? 0
-        ];
-
-        $this->render('finance_list', ['summary' => $summary, 'stats' => $stats]);
-    }
-    public function sessions() {
-        $clubId = $_SESSION['club_id'] ?? $_SESSION['selected_club_id'];
-        $groupId = $_GET['group_id'] ?? null;
-        $range = $_GET['range'] ?? 'week';
-    
-        $sql = "SELECT ts.*, g.GroupName 
-                FROM TrainingSessions ts 
-                JOIN Groups g ON ts.GroupID = g.GroupID 
-                WHERE ts.ClubID = ?";
-        
-        $params = [$clubId];
-    
-        if ($groupId) {
-            $sql .= " AND ts.GroupID = ?";
-            $params[] = $groupId;
-        }
-    
-        if ($range == 'today') {
-            $sql .= " AND ts.TrainingDate = CAST(GETDATE() AS DATE)";
-        } elseif ($range == 'week') {
-            // Bu haftaki dersler
-            $sql .= " AND ts.TrainingDate BETWEEN CAST(GETDATE() AS DATE) AND CAST(DATEADD(day, 7, GETDATE()) AS DATE)";
-        }
-    
-        $sql .= " ORDER BY ts.TrainingDate ASC, ts.StartTime ASC";
-        
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute($params);
-        $sessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    
-        // Grupları filtreleme için çek
-        $stmtG = $this->db->prepare("SELECT GroupID, GroupName FROM Groups WHERE ClubID = ?");
-        $stmtG->execute([$clubId]);
-        $groups = $stmtG->fetchAll(PDO::FETCH_ASSOC);
-    
-        $this->render('training_sessions_list', ['sessions' => $sessions, 'groups' => $groups]);
-    }
-    // --- TAHSİLAT İŞLEMİ (ÖDEME ALMA) ---
-    public function collect() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $studentId = $_POST['student_id'];
-            $amount = $_POST['amount'];
-            $method = $_POST['method'];
-            $desc = $_POST['description'];
-            $clubId = $_SESSION['club_id'] ?? $_SESSION['selected_club_id'];
-            $adminId = $_SESSION['user_id'];
-
-            try {
-                $sql = "INSERT INTO StudentPayments (StudentID, ClubID, Amount, Type, PaymentMethod, Description, CreatedBy) 
-                        VALUES (?, ?, ?, 'Collection', ?, ?, ?)";
-                
-                $stmt = $this->db->prepare($sql);
-                $stmt->execute([$studentId, $clubId, $amount, $method, $desc, $adminId]);
-
-                header("Location: index.php?page=finance&success=1");
-                exit;
-            } catch (Exception $e) {
-                die("Tahsilat Hatası: " . $e->getMessage());
-            }
-        }
-    }
-
-    // --- TOPLU AİDAT BORÇLANDIRMA ---
-    public function bulkDebt() {
-        $clubId = $_SESSION['club_id'] ?? $_SESSION['selected_club_id'];
-        $adminId = $_SESSION['user_id'];
-        $monthName = date('m/Y');
 
         try {
-            // Aktif öğrencilerin MonthlyFee miktarını 'Debt' olarak kaydet
-            $sql = "INSERT INTO StudentPayments (StudentID, ClubID, Amount, Type, Description, CreatedBy)
-                    SELECT StudentID, ClubID, MonthlyFee, 'Debt', ?, ?
-                    FROM Students 
-                    WHERE ClubID = ? AND IsActive = 1 AND MonthlyFee > 0";
+            // Artık $this->db dolu olduğu için prepare() hata vermeyecektir
+            $query = "SELECT s.StudentID, s.FullName, g.GroupName, s.NextPaymentDate,
+                      (SELECT SUM(Amount) FROM Payments WHERE StudentID = s.StudentID) as TotalPaid,
+                      (SELECT COUNT(*) FROM Payments WHERE StudentID = s.StudentID) as PaidMonths
+                      FROM Students s
+                      LEFT JOIN Groups g ON s.GroupID = g.GroupID
+                      WHERE s.ClubID = ? AND s.IsActive = 1";
             
-            $stmt = $this->db->prepare($sql);
-            $stmt->execute([$monthName . " Aidat Tahakkuku", $adminId, $clubId]);
+            $stmt = $this->db->prepare($query);
+            $stmt->execute([$clubId]);
+            $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            header("Location: index.php?page=finance&success=bulk");
-            exit;
-        } catch (Exception $e) {
-            die("Toplu Borçlandırma Hatası: " . $e->getMessage());
-        }
-    }
+            $today = strtotime('today');
+            $nextWeek = strtotime('+7 days');
 
-    // --- GİDER YÖNETİMİ ---
-    public function expenses() {
-        $clubId = $_SESSION['club_id'] ?? $_SESSION['selected_club_id'];
-        
-        $stmt = $this->db->prepare("SELECT * FROM ClubExpenses WHERE ClubID = ? ORDER BY ExpenseDate DESC");
-        $stmt->execute([$clubId]);
-        $expenses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($students as &$st) {
+                // Her öğrencinin son 12 ödeme kaydı
+                $histStmt = $this->db->prepare("SELECT TOP 12 Amount, PaymentMonth, PaymentDate 
+                                                FROM Payments 
+                                                WHERE StudentID = ? 
+                                                ORDER BY PaymentDate DESC");
+                $histStmt->execute([$st['StudentID']]);
+                $st['payment_history'] = $histStmt->fetchAll(PDO::FETCH_ASSOC);
+                
+                $paymentTime = !empty($st['NextPaymentDate']) ? strtotime($st['NextPaymentDate']) : null;
 
-        $this->render('expense_list', ['expenses' => $expenses]);
-    }
-
-    public function addExpense() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $clubId = $_SESSION['club_id'] ?? $_SESSION['selected_club_id'];
-            $category = $_POST['category'];
-            $amount = $_POST['amount'];
-            $desc = $_POST['description'];
-            $adminId = $_SESSION['user_id'];
-
-            try {
-                $sql = "INSERT INTO ClubExpenses (ClubID, Category, Amount, Description, CreatedBy) 
-                        VALUES (?, ?, ?, ?, ?)";
-                $this->db->prepare($sql)->execute([$clubId, $category, $amount, $desc, $adminId]);
-
-                header("Location: index.php?page=expenses&success=1");
-                exit;
-            } catch (Exception $e) {
-                die("Gider Kayıt Hatası: " . $e->getMessage());
+                $st['is_overdue'] = ($paymentTime !== null && $paymentTime < $today);
+                $st['is_upcoming'] = ($paymentTime !== null && $paymentTime >= $today && $paymentTime <= $nextWeek);
             }
+
+            $data = ['students' => $students];
+            $this->render('club_finance', $data);
+
+        } catch (Exception $e) {
+            die("Kulüp Finans Hatası: " . $e->getMessage());
         }
     }
 
-    // Render Yardımcı Fonksiyonu
     private function render($view, $data = []) {
         extract($data);
         ob_start();
-        include __DIR__ . "/../Views/admin/{$view}.php";
+        $viewPath = __DIR__ . "/../Views/admin/{$view}.php";
+        if (file_exists($viewPath)) {
+            include $viewPath;
+        } else {
+            die("Görünüm dosyası bulunamadı: $viewPath");
+        }
         $content = ob_get_clean();
         include __DIR__ . '/../Views/layouts/admin_layout.php';
     }
