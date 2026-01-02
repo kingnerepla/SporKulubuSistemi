@@ -37,17 +37,19 @@
 <body>
 
 <?php 
+// Oturumdaki rolü al
 $currentRole = strtolower(trim($_SESSION['role'] ?? 'guest')); 
 
+// Rol Kontrolleri
 $isSystemAdmin = ($currentRole === 'systemadmin' || $currentRole === 'superadmin');
 $isClubAdmin   = ($currentRole === 'clubadmin' || $currentRole === 'admin');
 $isCoach       = ($currentRole === 'coach' || $currentRole === 'trainer');
 $isParent      = ($currentRole === 'parent' || $currentRole === 'veli');
 
-// Süper admin için artık sol menüde denetlenen kulüp linklerini göstermiyoruz
-// Sadece normal Admin ve Antrenörler için kulüp menüsü gösterilecek
+// Menü Gösterim Mantığı
 $showClubMenu = ($isClubAdmin || $isCoach);
 
+// Üst Bar Bilgileri
 $displayClubName = $_SESSION['selected_club_name'] ?? $_SESSION['club_name'] ?? 'Yönetim Merkezi';
 $displayClubLogo = $_SESSION['selected_club_logo'] ?? $_SESSION['club_logo'] ?? null;
 $activePage = $_GET['page'] ?? 'dashboard';
@@ -71,11 +73,15 @@ $activePage = $_GET['page'] ?? 'dashboard';
                     <i class="fa-solid fa-building-shield me-2 text-primary"></i> Kulüp Denetimi
                 </a>
                 <a href="index.php?page=system_finance" class="list-group-item list-group-item-action <?= ($activePage == 'system_finance') ? 'active' : '' ?>">
-                    <i class="fa-solid fa-sack-dollar me-2 text-success"></i> Genel Finans
+                    <i class="fa-solid fa-sack-dollar me-2 text-success"></i> Genel Gelirler (SaaS)
+                </a>
+                <a href="index.php?page=expenses" class="list-group-item list-group-item-action <?= ($activePage == 'expenses') ? 'active' : '' ?>">
+                    <i class="fa-solid fa-receipt me-2 text-danger"></i> Gider Yönetimi
                 </a>
                 <a href="index.php?page=packages" class="list-group-item list-group-item-action <?= ($activePage == 'packages') ? 'active' : '' ?>">
                     <i class="fa-solid fa-box-open me-2 text-warning"></i> Paket Yönetimi
                 </a>
+            
             <?php else: ?>
                 <a href="index.php?page=dashboard" class="list-group-item list-group-item-action <?= ($activePage == 'dashboard') ? 'active' : '' ?>">
                     <i class="fa-solid fa-house me-2 text-info"></i> Dashboard
@@ -88,7 +94,7 @@ $activePage = $_GET['page'] ?? 'dashboard';
                 </div>
                 
                 <?php if ($isClubAdmin): ?>
-                    <a href="index.php?page=coaches" class="list-group-item list-group-item-action <?= ($activePage == 'coaches') ? 'active' : '' ?>">
+                    <a href="index.php?page=coach_list" class="list-group-item list-group-item-action <?= ($activePage == 'coach_list') ? 'active' : '' ?>">
                         <i class="fa-solid fa-user-tie me-2"></i> Antrenörler
                     </a>
                 <?php endif; ?>
@@ -112,9 +118,14 @@ $activePage = $_GET['page'] ?? 'dashboard';
                 </a>
 
                 <?php if ($isClubAdmin): ?>
-                    <div class="menu-header">Finansal Takip</div>
+                    <div class="menu-header">FİNANSAL YÖNETİM</div>
+                    
                     <a href="index.php?page=club_finance" class="list-group-item list-group-item-action <?= ($activePage == 'club_finance') ? 'active' : '' ?>">
-                        <i class="fa-solid fa-money-bill-transfer me-2 text-success"></i> Aidat Takibi
+                        <i class="fa-solid fa-cash-register me-2 text-success"></i> Kasa & Tahsilat
+                    </a>
+                    
+                    <a href="index.php?page=expenses" class="list-group-item list-group-item-action <?= ($activePage == 'expenses') ? 'active' : '' ?>">
+                        <i class="fa-solid fa-file-invoice-dollar me-2 text-danger"></i> Giderler
                     </a>
                 <?php endif; ?>
             <?php endif; ?>
@@ -131,7 +142,6 @@ $activePage = $_GET['page'] ?? 'dashboard';
             </a>
         </div>
     </div>
-
     <div id="page-content-wrapper">
         <nav class="navbar d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center">
@@ -175,8 +185,17 @@ $activePage = $_GET['page'] ?? 'dashboard';
             <?php echo $content; ?>
         </div>
     </div>
-</div>
+    </div>
 
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js"></script>
+<script>
+    $(document).ready(function(){
+        // Telefon Maskesi (Tüm formlar için genel)
+        $('input[name="phone"], input[name="parent_phone"], input[name="parent_phone_account"]').mask('(000) 000 00 00');
+    });
+</script>
+
 </body>
 </html>

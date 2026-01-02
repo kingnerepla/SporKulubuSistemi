@@ -1,155 +1,133 @@
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2><i class="fa-solid fa-users-rectangle me-2"></i>Grup ve Takım Yönetimi</h2>
-    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addGroupModal">
-        <i class="fa-solid fa-plus"></i> Yeni Grup Oluştur
-    </button>
-</div>
+<div class="container-fluid py-4">
 
-<?php if(isset($_GET['success'])): ?>
-    <?php if($_GET['success'] == 'created'): ?>
-        <div class="alert alert-success"><i class="fa-solid fa-check me-2"></i>Yeni grup başarıyla oluşturuldu.</div>
-    <?php elseif($_GET['success'] == 'updated'): ?>
-        <div class="alert alert-success"><i class="fa-solid fa-check me-2"></i>Grup bilgileri güncellendi.</div>
-    <?php elseif($_GET['success'] == 'deleted'): ?>
-        <div class="alert alert-warning"><i class="fa-solid fa-trash me-2"></i>Grup silindi.</div>
+    <div class="d-flex justify-content-between align-items-center mb-4 px-2">
+        <div>
+            <h3 class="fw-bold mb-1"><i class="fa-solid fa-layer-group text-primary me-2"></i>Grup Yönetimi</h3>
+            <p class="text-muted small mb-0">Antrenman gruplarını ve haftalık ders programlarını yönetin.</p>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm shadow-sm px-3" onclick="openModal()">
+            <i class="fa-solid fa-plus me-1"></i>Yeni Grup Oluştur
+        </button>
+    </div>
+
+    <?php if(!empty($_SESSION['success_message'])): ?>
+        <div class="alert alert-success alert-dismissible fade show mb-3">
+            <?= $_SESSION['success_message']; unset($_SESSION['success_message']); ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
     <?php endif; ?>
-<?php elseif(isset($_GET['error']) && $_GET['error'] == 'has_students'): ?>
-    <div class="alert alert-danger">
-        <i class="fa-solid fa-triangle-exclamation me-2"></i>
-        <strong>Hata:</strong> Bu grupta kayıtlı öğrenciler var! Silmeden önce öğrencilerin grubunu değiştirin veya silin.
-    </div>
-<?php endif; ?>
 
-<div class="card shadow-sm">
-    <div class="card-body">
-        <div class="table-responsive">
-            <table class="table table-hover align-middle">
-                <thead class="table-light">
-                    <tr>
-                        <th>Grup / Takım Adı</th>
-                        <th>Sorumlu Antrenör</th>
-                        <th class="text-center">Öğrenci Sayısı</th>
-                        <th class="text-end">İşlemler</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach($groups as $group): ?>
-                    <tr>
-                        <td>
-                            <strong class="text-primary"><?php echo htmlspecialchars($group['GroupName']); ?></strong>
-                        </td>
-                        <td>
-                            <?php if(!empty($group['TrainerName'])): ?>
-                                <span class="badge bg-info text-dark border">
-                                    <i class="fa-solid fa-whistle me-1"></i> <?php echo htmlspecialchars($group['TrainerName']); ?>
-                                </span>
-                            <?php else: ?>
-                                <span class="badge bg-secondary text-white-50">Atanmadı</span>
-                            <?php endif; ?>
-                        </td>
-                        <td class="text-center">
-                            <span class="badge bg-light text-dark border">
-                                <i class="fa-solid fa-users me-1"></i> <?php echo $group['StudentCount'] ?? 0; ?> Öğrenci
-                            </span>
-                        </td>
-                        <td class="text-end">
-                            <button class="btn btn-sm btn-outline-warning text-dark edit-btn" 
-                                    data-bs-toggle="modal" 
-                                    data-bs-target="#editGroupModal"
-                                    data-id="<?php echo $group['GroupID']; ?>"
-                                    data-name="<?php echo htmlspecialchars($group['GroupName']); ?>"
-                                    data-trainer="<?php echo $group['TrainerID'] ?? ''; ?>">
-                                <i class="fa-solid fa-pen"></i> Düzenle
-                            </button>
-                            <a href="index.php?page=group_schedule&id=<?= $group['GroupID'] ?>" class="btn btn-sm btn-outline-primary" title="Haftalık Program">
-                                <i class="fa-solid fa-calendar-days"></i> Program
-                            </a>
-                            <a href="index.php?page=group_delete&id=<?php echo $group['GroupID']; ?>" 
-                               class="btn btn-sm btn-outline-danger"
-                               onclick="return confirm('UYARI: \nBu grubu silmek istediğinize emin misiniz?');">
-                               <i class="fa-solid fa-trash"></i> Sil
-                            </a>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                    
-                    <?php if(empty($groups)): ?>
-                        <tr>
-                            <td colspan="4" class="text-center text-muted py-4">Henüz oluşturulmuş bir grup yok.</td>
-                        </tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
+    <div class="row g-4">
+        <?php if(!empty($groups)): foreach($groups as $g): ?>
+        <div class="col-md-6 col-xl-4">
+            <div class="card h-100 border-0 shadow-sm hover-shadow transition-all">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <h5 class="fw-bold text-dark mb-1"><?= htmlspecialchars($g['GroupName']) ?></h5>
+                            <div class="small text-muted">
+                                <i class="fa-solid fa-user-tie me-1"></i><?= htmlspecialchars($g['CoachName'] ?? 'Antrenör Yok') ?>
+                            </div>
+                        </div>
+                        
+                        <div class="dropdown">
+                            <button class="btn btn-link text-muted p-0" data-bs-toggle="dropdown"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+                            <ul class="dropdown-menu dropdown-menu-end border-0 shadow">
+                                <li>
+                                    <a class="dropdown-item" href="#" onclick='editGroup(<?= json_encode($g, JSON_HEX_APOS | JSON_HEX_QUOT) ?>)'>
+                                        <i class="fa-solid fa-pen me-2 text-primary"></i>Düzenle
+                                    </a>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <a class="dropdown-item text-danger" href="index.php?page=group_delete&id=<?= $g['GroupID'] ?>" onclick="return confirm('Silmek istediğine emin misin?')">
+                                        <i class="fa-solid fa-trash me-2"></i>Sil
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="bg-light rounded p-3 mb-3">
+                        <h6 class="x-small text-uppercase fw-bold text-muted mb-2">Ders Programı</h6>
+                        <?php if(!empty($g['Schedule'])): ?>
+                            <ul class="list-unstyled mb-0 small">
+                                <?php 
+                                $daysMap = [1=>'Pzt', 2=>'Sal', 3=>'Çrş', 4=>'Prş', 5=>'Cum', 6=>'Cmt', 7=>'Paz'];
+                                foreach($g['Schedule'] as $sch): 
+                                    $startTime = isset($sch['StartTime']) ? substr($sch['StartTime'], 0, 5) : '??:??';
+                                    $endTime = isset($sch['EndTime']) ? substr($sch['EndTime'], 0, 5) : '??:??';
+                                ?>
+                                <li class="d-flex justify-content-between border-bottom border-light pb-1 mb-1">
+                                    <span class="fw-bold text-dark w-25"><?= $daysMap[$sch['DayOfWeek']] ?? '-' ?></span>
+                                    <span class="text-muted"><i class="fa-regular fa-clock me-1"></i><?= $startTime ?> - <?= $endTime ?></span>
+                                </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        <?php else: ?>
+                            <div class="text-muted x-small fst-italic">Program girilmemiş.</div>
+                        <?php endif; ?>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center pt-2">
+                        <span class="small fw-bold text-secondary">Sporcu Sayısı</span>
+                        <span class="badge bg-primary rounded-pill px-3"><?= $g['StudentCount'] ?></span>
+                    </div>
+                </div>
+            </div>
         </div>
+        <?php endforeach; else: ?>
+            <div class="col-12 text-center py-5">
+                <i class="fa-solid fa-layer-group fa-3x text-muted opacity-25 mb-3"></i>
+                <p class="text-muted">Henüz hiç grup oluşturulmamış.</p>
+                <button class="btn btn-outline-primary btn-sm" onclick="openModal()">İlk Grubu Oluştur</button>
+            </div>
+        <?php endif; ?>
     </div>
 </div>
 
-<div class="modal fade" id="addGroupModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            
+<div class="modal fade" id="groupModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4">
             <form action="index.php?page=group_store" method="POST">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title"><i class="fa-solid fa-plus me-2"></i>Yeni Grup Oluştur</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Grup / Takım Adı</label>
-                        <input type="text" name="group_name" class="form-control" placeholder="Örn: U14 Futbol A Takımı" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Sorumlu Antrenör</label>
-                        <select name="trainer_id" class="form-select">
-                            <option value="">-- Atama Yapılmadı --</option>
-                            <?php foreach($trainers as $trainer): ?>
-                                <option value="<?php echo $trainer['UserID']; ?>">
-                                    <?php echo htmlspecialchars($trainer['FullName']); ?> (Antrenör)
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                        <small class="text-muted">Listede sadece "Antrenör" rolündeki kullanıcılar görünür.</small>
-                    </div>
-                </div>
-                <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
-                    <button type="submit" class="btn btn-primary">Kaydet</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<div class="modal fade" id="editGroupModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form action="index.php?page=group_update" method="POST">
-                <input type="hidden" name="group_id" id="edit_group_id">
+                <input type="hidden" name="group_id" id="modalGroupId">
                 
-                <div class="modal-header bg-warning">
-                    <h5 class="modal-title"><i class="fa-solid fa-pen-to-square me-2"></i>Grubu Düzenle</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <div class="modal-header bg-primary text-white">
+                    <h6 class="modal-title fw-bold" id="modalTitle">Yeni Grup Oluştur</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body">
+                
+                <div class="modal-body p-4">
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Grup Adı</label>
-                        <input type="text" name="group_name" id="edit_group_name" class="form-control" required>
+                        <label class="small fw-bold mb-1">Grup Adı</label>
+                        <input type="text" name="group_name" id="modalGroupName" class="form-control" placeholder="Örn: U12 Basketbol" required>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Sorumlu Antrenör</label>
-                        <select name="trainer_id" id="edit_trainer_id" class="form-select">
-                            <option value="">-- Atama Yapılmadı --</option>
-                            <?php foreach($trainers as $trainer): ?>
-                                <option value="<?php echo $trainer['UserID']; ?>">
-                                    <?php echo htmlspecialchars($trainer['FullName']); ?>
-                                </option>
-                            <?php endforeach; ?>
+
+                    <div class="mb-4">
+                        <label class="small fw-bold mb-1">Sorumlu Antrenör</label>
+                        <select name="coach_id" id="modalCoachId" class="form-select">
+                            <option value="">-- Atanmadı --</option>
+                            <?php if(!empty($coaches)): foreach($coaches as $c): ?>
+                                <option value="<?= $c['UserID'] ?>"><?= htmlspecialchars($c['FullName']) ?></option>
+                            <?php endforeach; endif; ?>
                         </select>
                     </div>
+
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="small fw-bold mb-0">Haftalık Program</label>
+                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill" onclick="addScheduleRow()">
+                            <i class="fa-solid fa-plus me-1"></i>Ders Ekle
+                        </button>
+                    </div>
+                    
+                    <div id="scheduleContainer" class="bg-light p-2 rounded border" style="max-height: 250px; overflow-y: auto;">
+                        </div>
+                    <div class="form-text x-small mt-1">Aynı gün için birden fazla saat ekleyebilirsiniz.</div>
+
                 </div>
-                <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
-                    <button type="submit" class="btn btn-primary">Değişiklikleri Kaydet</button>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-primary px-4 fw-bold">Kaydet</button>
                 </div>
             </form>
         </div>
@@ -157,20 +135,106 @@
 </div>
 
 <script>
-document.addEventListener("DOMContentLoaded", function() {
-    const editBtns = document.querySelectorAll('.edit-btn');
-    
-    editBtns.forEach(btn => {
-        btn.addEventListener('click', function() {
-            // Null check yaparak verileri al
-            const id = this.dataset.id;
-            const name = this.dataset.name;
-            const trainerId = this.dataset.trainer || "";
+    // Global değişkenler (Tanımsız hatası almamak için)
+    var groupModalObj = null;
+    var scheduleContainer = null;
 
-            document.getElementById('edit_group_id').value = id;
-            document.getElementById('edit_group_name').value = name;
-            document.getElementById('edit_trainer_id').value = trainerId;
-        });
+    // Sayfa tamamen yüklendiğinde çalıştır
+    document.addEventListener('DOMContentLoaded', function() {
+        
+        // 1. Modalı Tanımla
+        var modalEl = document.getElementById('groupModal');
+        if (modalEl) {
+            groupModalObj = new bootstrap.Modal(modalEl);
+        } else {
+            console.error("HATA: groupModal ID'li element bulunamadı!");
+        }
+
+        // 2. Container'ı Tanımla
+        scheduleContainer = document.getElementById('scheduleContainer');
     });
-});
+
+    // Satır Ekleme Fonksiyonu
+    function addScheduleRow(day = 1, start = '17:00', end = '18:30') {
+        if (!scheduleContainer) return; // Güvenlik kontrolü
+
+        const row = document.createElement('div');
+        row.className = 'row g-2 mb-2 align-items-center schedule-row';
+        
+        row.innerHTML = `
+            <div class="col-4">
+                <select name="days[]" class="form-select form-select-sm" required>
+                    <option value="1" ${day==1?'selected':''}>Pazartesi</option>
+                    <option value="2" ${day==2?'selected':''}>Salı</option>
+                    <option value="3" ${day==3?'selected':''}>Çarşamba</option>
+                    <option value="4" ${day==4?'selected':''}>Perşembe</option>
+                    <option value="5" ${day==5?'selected':''}>Cuma</option>
+                    <option value="6" ${day==6?'selected':''}>Cumartesi</option>
+                    <option value="7" ${day==7?'selected':''}>Pazar</option>
+                </select>
+            </div>
+            <div class="col-3">
+                <input type="time" name="starts[]" class="form-control form-select-sm" value="${start}" required>
+            </div>
+            <div class="col-3">
+                <input type="time" name="ends[]" class="form-control form-select-sm" value="${end}" required>
+            </div>
+            <div class="col-2 text-end">
+                <button type="button" class="btn btn-link text-danger p-0" onclick="this.closest('.row').remove()">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+        `;
+        scheduleContainer.appendChild(row);
+    }
+
+    // Yeni Grup Modalı Aç
+    function openModal() {
+        if (!groupModalObj) {
+            alert("Sayfa tam yüklenmedi veya hata oluştu. Lütfen sayfayı yenileyin.");
+            return;
+        }
+
+        document.getElementById('modalGroupId').value = '';
+        document.getElementById('modalGroupName').value = '';
+        document.getElementById('modalCoachId').value = '';
+        document.getElementById('modalTitle').innerText = 'Yeni Grup Oluştur';
+        
+        scheduleContainer.innerHTML = ''; // Temizle
+        addScheduleRow(); // Varsayılan 1 satır ekle
+        
+        groupModalObj.show();
+    }
+
+    // Düzenle Modalı Aç
+    function editGroup(group) {
+        if (!groupModalObj) return;
+
+        document.getElementById('modalGroupId').value = group.GroupID;
+        document.getElementById('modalGroupName').value = group.GroupName;
+        document.getElementById('modalCoachId').value = group.CoachID || '';
+        document.getElementById('modalTitle').innerText = 'Grubu Düzenle';
+
+        scheduleContainer.innerHTML = ''; // Temizle
+        
+        // Varsa programı yükle
+        if (group.Schedule && group.Schedule.length > 0) {
+            group.Schedule.forEach(sch => {
+                const start = sch.StartTime ? sch.StartTime.substring(0, 5) : '17:00';
+                const end = sch.EndTime ? sch.EndTime.substring(0, 5) : '18:30';
+                addScheduleRow(sch.DayOfWeek, start, end);
+            });
+        } else {
+            addScheduleRow();
+        }
+
+        groupModalObj.show();
+    }
 </script>
+
+<style>
+    .hover-shadow:hover { transform: translateY(-3px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important; }
+    .transition-all { transition: all 0.3s ease; }
+    .x-small { font-size: 0.7rem; }
+    body { background-color: #f4f7f6; }
+</style>

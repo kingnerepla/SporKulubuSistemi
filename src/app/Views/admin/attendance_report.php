@@ -1,183 +1,153 @@
-<?php
-// Ay ve Yıl değişkenleri yoksa bugüne ayarla
-$month = $month ?? date('m');
-$year = $year ?? date('Y');
-$daysInMonth = $daysInMonth ?? date('t', strtotime("$year-$month-01"));
+<div class="container-fluid py-4">
 
-// Hata Ayıklama: Eğer veri boş gelirse örnek veri oluştur (Tasarımı görmek için)
-if (!isset($reportMatrix) || empty($reportMatrix)) {
-    $reportMatrix = [
-        ['FullName' => 'Örnek Sporcu 1', 'presentCount' => 5, 'days' => array_fill(1, $daysInMonth, 1)],
-        ['FullName' => 'Örnek Sporcu 2', 'presentCount' => 3, 'days' => array_fill(1, $daysInMonth, 0)],
-    ];
-}
-?>
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body p-4">
+            <h5 class="fw-bold text-primary mb-3"><i class="fa-solid fa-chart-column me-2"></i>Aylık Yoklama Raporu</h5>
+            
+            <form action="index.php" method="GET" class="row g-3 align-items-end">
+                <input type="hidden" name="page" value="attendance_report">
+                
+                <div class="col-md-4">
+                    <label class="small fw-bold text-muted mb-1">Grup / Takım</label>
+                    <select name="group_id" class="form-select shadow-sm" onchange="this.form.submit()">
+                        <?php if(empty($groups)): ?>
+                            <option value="">Grup Bulunamadı</option>
+                        <?php else: ?>
+                            <?php foreach($groups as $g): ?>
+                                <option value="<?= $g['GroupID'] ?>" <?= ($selectedGroupId == $g['GroupID']) ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($g['GroupName']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="small fw-bold text-muted mb-1">Ay</label>
+                    <select name="month" class="form-select shadow-sm" onchange="this.form.submit()">
+                        <?php 
+                        $months = [
+                            1=>'Ocak', 2=>'Şubat', 3=>'Mart', 4=>'Nisan', 5=>'Mayıs', 6=>'Haziran',
+                            7=>'Temmuz', 8=>'Ağustos', 9=>'Eylül', 10=>'Ekim', 11=>'Kasım', 12=>'Aralık'
+                        ];
+                        foreach($months as $k => $v): ?>
+                            <option value="<?= $k ?>" <?= ($selectedMonth == $k) ? 'selected' : '' ?>><?= $v ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="small fw-bold text-muted mb-1">Yıl</label>
+                    <select name="year" class="form-select shadow-sm" onchange="this.form.submit()">
+                        <?php 
+                        $currentYear = date('Y');
+                        for($y = $currentYear; $y >= $currentYear - 2; $y--): ?>
+                            <option value="<?= $y ?>" <?= ($selectedYear == $y) ? 'selected' : '' ?>><?= $y ?></option>
+                        <?php endfor; ?>
+                    </select>
+                </div>
+                
+                <div class="col-md-2 text-end">
+                     <button type="button" class="btn btn-outline-success w-100" onclick="window.print()">
+                        <i class="fa-solid fa-print me-1"></i>Yazdır
+                     </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <?php if(!empty($students)): 
+        // Seçilen ayın kaç gün çektiğini bul
+        $daysInMonth = cal_days_in_month(CAL_GREGORIAN, $selectedMonth, $selectedYear);
+    ?>
+    <div class="card border-0 shadow rounded-4 overflow-hidden">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover text-center align-middle mb-0" style="font-size: 0.85rem;">
+                <thead class="bg-light text-secondary">
+                    <tr>
+                        <th class="ps-3 text-start bg-white position-sticky start-0" style="min-width: 200px; z-index:10;">Öğrenci Adı</th>
+                        <th class="bg-white text-muted" style="min-width: 60px;">Katılım</th>
+                        
+                        <?php for($d=1; $d<=$daysInMonth; $d++): 
+                            // O gün ders var mıydı? (Varsa sütun başlığını koyu yap)
+                            $isLessonDay = isset($lessonDays[$d]);
+                            $bgClass = $isLessonDay ? 'bg-primary text-white bg-opacity-75' : '';
+                        ?>
+                            <th class="<?= $bgClass ?>" style="width: 35px; min-width: 35px;"><?= $d ?></th>
+                        <?php endfor; ?>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach($students as $s): 
+                        $sid = $s['StudentID'];
+                        $presentCount = 0; // O ay kaç kere gelmiş?
+                        
+                        // Önce sayalım
+                        for($d=1; $d<=$daysInMonth; $d++) {
+                            if(isset($attendanceData[$sid][$d]) && $attendanceData[$sid][$d] == 1) {
+                                $presentCount++;
+                            }
+                        }
+                    ?>
+                    <tr>
+                        <td class="ps-3 text-start fw-bold text-dark position-sticky start-0 bg-white" style="z-index:10; border-right: 2px solid #eee;">
+                            <?= htmlspecialchars($s['FullName']) ?>
+                        </td>
+
+                        <td>
+                            <span class="badge bg-info text-dark bg-opacity-10 border border-info border-opacity-25 rounded-pill">
+                                <?= $presentCount ?> Ders
+                            </span>
+                        </td>
+
+                        <?php for($d=1; $d<=$daysInMonth; $d++): 
+                            $status = $attendanceData[$sid][$d] ?? null; // 1: Geldi, 0: Gelmedi, null: Kayıt Yok
+                            $cellContent = '';
+                            $cellClass = '';
+
+                            if ($status === 1) { // GELDİ
+                                $cellContent = '<i class="fa-solid fa-check"></i>';
+                                $cellClass = 'text-success bg-success bg-opacity-10 fw-bold';
+                            } elseif ($status === 0) { // GELMEDİ (Ama ders varmış)
+                                $cellContent = '<i class="fa-solid fa-xmark"></i>';
+                                $cellClass = 'text-danger bg-danger bg-opacity-10';
+                            } else {
+                                // Kayıt yok. Eğer o gün başkalarına yoklama alınmışsa (ders günüyse), bu öğrenci yok yazılmalı veya boş
+                                if (isset($lessonDays[$d])) {
+                                    $cellContent = '<span class="text-muted opacity-25">-</span>';
+                                }
+                            }
+                        ?>
+                            <td class="<?= $cellClass ?> p-0"><?= $cellContent ?></td>
+                        <?php endfor; ?>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div class="mt-3 text-muted small">
+        <i class="fa-solid fa-check text-success me-1"></i>: Derse Katıldı &nbsp;|&nbsp; 
+        <i class="fa-solid fa-xmark text-danger me-1"></i>: Devamsız
+    </div>
+
+    <?php else: ?>
+        <div class="alert alert-warning shadow-sm rounded-3 mt-3 border-0">
+            <i class="fa-solid fa-triangle-exclamation me-2"></i>
+            Bu grupta henüz öğrenci yok veya seçim yapılmadı.
+        </div>
+    <?php endif; ?>
+
+</div>
 
 <style>
-    /* Kart ve Genel Yapı */
-    .student-card { 
-        background: #ffffff; 
-        border-radius: 16px; 
-        border: 1px solid #eef2f6; 
-        margin-bottom: 25px; 
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); 
-        overflow: hidden;
-    }
-    
-    .card-header-custom { 
-        padding: 15px 20px; 
-        background: #f8fafc; 
-        border-bottom: 1px solid #e2e8f0; 
-        display: flex; 
-        justify-content: space-between; 
-        align-items: center;
-    }
-
-    /* Haftalık Gruplandırma (Mobil Uyumlu Flex) */
-    .weeks-container { 
-        display: flex; 
-        flex-wrap: wrap; /* Mobilde alta geçmeyi sağlar */
-        gap: 12px; 
-        padding: 15px; 
-        background: #ffffff;
-    }
-
-    .week-box { 
-        border: 1px solid #f1f5f9; 
-        border-radius: 12px; 
-        padding: 12px; 
-        flex: 1; 
-        min-width: 280px; /* Tablet ve Mobilde genişliği zorlar */
-        max-width: 100%;
-        background: #fafbfc;
-    }
-
-    .week-title {
-        font-size: 10px;
-        font-weight: 800;
-        color: #94a3b8;
-        text-transform: uppercase;
-        margin-bottom: 10px;
-        display: block;
-        text-align: center;
-    }
-
-    /* 7 Günlük Kare Grid */
-    .days-grid { 
-        display: grid; 
-        grid-template-columns: repeat(7, 1fr); 
-        gap: 8px; 
-    }
-
-    /* Durum Kareleri */
-    .status-sq { 
-        width: 100%; 
-        aspect-ratio: 1 / 1; /* Tam kare olmasını sağlar */
-        max-width: 38px;
-        margin: 0 auto;
-        border-radius: 8px; 
-        display: flex; 
-        align-items: center; 
-        justify-content: center; 
-        font-size: 12px; 
-        color: white; 
-        position: relative; 
-        transition: transform 0.2s;
-    }
-
-    .st-v { background: #22c55e; box-shadow: 0 2px 4px rgba(34, 197, 94, 0.2); } /* Var */
-    .st-y { background: #ef4444; box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2); } /* Yok */
-    .st-n { background: #f1f5f9; color: #cbd5e1; border: 1px dashed #cbd5e1; } /* Kayıt Yok */
-
-    .d-n { 
-        position: absolute; 
-        top: 2px; 
-        right: 3px; 
-        font-size: 8px; 
-        font-weight: bold;
-        opacity: 0.6; 
-    }
-
-    .day-name { font-size: 9px; font-weight: 600; color: #64748b; margin-bottom: 4px; }
-    .weekend { color: #f87171 !important; }
-
-    /* Mobil İnce Ayar */
-    @media (max-width: 576px) {
-        .week-box { min-width: 100%; } 
-        .status-sq { max-width: 45px; font-size: 14px; }
+    /* Yazdırma Ayarları */
+    @media print {
+        body * { visibility: hidden; }
+        .card-body, .card-body * { visibility: visible; }
+        .card-body { position: absolute; left: 0; top: 0; width: 100%; }
+        .position-sticky { position: static !important; } /* Yazıcıda sticky sorun çıkarır */
+        .btn { display: none; } /* Butonları gizle */
     }
 </style>
-
-<div class="container-fluid py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h4 class="fw-bold m-0"><i class="fas fa-th-large text-primary me-2"></i>Aylık Devam Çizelgesi</h4>
-        <div class="badge bg-white text-dark border px-3 py-2 rounded-pill shadow-sm">
-            <i class="far fa-calendar-alt me-1"></i> <?= $month ?>. Ay / <?= $year ?>
-        </div>
-    </div>
-
-    <?php foreach($reportMatrix as $student): ?>
-    <div class="student-card">
-        <div class="card-header-custom">
-            <span class="fw-bold text-dark"><i class="fas fa-user-circle me-2 text-secondary"></i><?= htmlspecialchars($student['FullName']) ?></span>
-            <span class="badge bg-soft-success text-success border border-success px-3 py-2 rounded-pill" style="background: #f0fdf4;">
-                <?php 
-                    $totalSessions = count(array_filter($student['days'], function($val) { return $val !== null; }));
-                    $rate = ($totalSessions > 0) ? round(($student['presentCount'] / $totalSessions) * 100) : 0;
-                ?>
-                Katılım: %<?= $rate ?>
-            </span>
-        </div>
-        
-        <div class="weeks-container">
-            <?php 
-            $currentWeek = [];
-            for($d = 1; $d <= $daysInMonth; $d++) {
-                $ts = strtotime("$year-$month-$d");
-                $dow = date('N', $ts); 
-                $currentWeek[] = ['d' => $d, 'dow' => $dow, 'ts' => $ts];
-
-                // Pazar günü (7) bittiyse veya ayın son günü ise haftayı kapat
-                if ($dow == 7 || $d == $daysInMonth) {
-                    echo '<div class="week-box">';
-                    echo '<span class="week-title">Hafta ' . date('W', $currentWeek[0]['ts']) . '</span>';
-                    echo '<div class="days-grid">';
-                    
-                    // Ayın ilk haftası için boşluk doldurma (Pazartesi değilse)
-                    if ($d <= 7) {
-                        $firstDayDow = date('N', strtotime("$year-$month-01"));
-                        for($i = 1; $i < $firstDayDow; $i++) echo '<div></div>';
-                    }
-
-                    foreach($currentWeek as $day) {
-                        $status = $student['days'][$day['d']] ?? null;
-                        $isWeekend = ($day['dow'] >= 6);
-                        ?>
-                        <div class="text-center">
-                            <div class="day-name <?= $isWeekend ? 'weekend' : '' ?>"><?= mb_substr(date('D', $day['ts']), 0, 2) ?></div>
-                            <div class="status-sq <?= ($status !== null) ? ($status == 1 ? 'st-v' : 'st-y') : 'st-n' ?>">
-                                <span class="d-n"><?= $day['d'] ?></span>
-                                <?php if($status !== null): ?>
-                                    <i class="fas <?= $status == 1 ? 'fa-check' : 'fa-times' ?>"></i>
-                                <?php else: ?>
-                                    <small style="font-size: 8px;">•</small>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                        <?php
-                    }
-                    echo '</div></div>';
-                    $currentWeek = [];
-                }
-            }
-            ?>
-        </div>
-    </div>
-    <?php endforeach; ?>
-
-    <div class="d-flex justify-content-center gap-4 mt-2 mb-5 small fw-bold text-muted text-uppercase" style="letter-spacing: 1px;">
-        <span><i class="fas fa-square text-success me-1"></i> Var</span>
-        <span><i class="fas fa-square text-danger me-1"></i> Yok</span>
-        <span><i class="fas fa-square text-light border me-1"></i> Kayıt Yok</span>
-    </div>
-</div>

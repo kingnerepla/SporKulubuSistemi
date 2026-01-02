@@ -1,105 +1,131 @@
 <?php
-
 class GroupController {
     private $db;
 
     public function __construct() {
+        if (file_exists(__DIR__ . '/../Config/Database.php')) require_once __DIR__ . '/../Config/Database.php';
         $this->db = (new Database())->getConnection();
     }
 
+    // --- GRUPLARI LİSTELE ---
     public function index() {
-        // 1. Oturum bilgilerini al
-        $role = trim($_SESSION['role'] ?? 'Guest');
-        $currentUserId = $_SESSION['user_id'] ?? null;
+        $clubId = $_SESSION['selected_club_id'] ?? $_SESSION['club_id'];
 
-        // 2. Kulüp ID Belirleme (Sadece kendi kulübü)
-        $clubId = ($role === 'SystemAdmin') ? ($_SESSION['selected_club_id'] ?? null) : ($_SESSION['club_id'] ?? null);
-
-        if (!$clubId) {
-            header("Location: index.php?page=dashboard&error=no_club_context");
-            exit;
-        }
-
-        // 3. Grupları Getir (Sadece bu kulübe ait gruplar)
-        $sqlGroups = "SELECT g.*, u.FullName as TrainerName,
-                (SELECT COUNT(*) FROM Students s WHERE s.GroupID = g.GroupID AND s.IsActive = 1) as StudentCount
+        // Grupları Çek
+        $sql = "SELECT g.*, u.FullName as CoachName,
+                       (SELECT COUNT(*) FROM Students WHERE GroupID = g.GroupID AND IsActive = 1) as StudentCount
                 FROM Groups g
-                LEFT JOIN Users u ON g.TrainerID = u.UserID
+                LEFT JOIN Users u ON g.CoachID = u.UserID
                 WHERE g.ClubID = ? 
                 ORDER BY g.GroupName ASC";
-        
-        $stmtGroups = $this->db->prepare($sqlGroups);
-        $stmtGroups->execute([$clubId]);
-        $groups = $stmtGroups->fetchAll(PDO::FETCH_ASSOC);
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([$clubId]);
+        $groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // 4. KRİTİK DÜZELTME: Sadece BU KULÜBÜN antrenörlerini getir
-        $sqlTrainers = "SELECT UserID, FullName 
-                        FROM Users 
-                        WHERE ClubID = ? 
-                        AND RoleID = 2 
-                        AND IsActive = 1 
-                        ORDER BY FullName ASC";
-        
-        $stmtTrainers = $this->db->prepare($sqlTrainers);
-        $stmtTrainers->execute([$clubId]); // Sadece oturumdaki clubId kullanılıyor
-        $trainers = $stmtTrainers->fetchAll(PDO::FETCH_ASSOC);
+        // Her grubun ders programını çek
+        foreach ($groups as &$g) {
+            $schedSql = "SELECT * FROM GroupSchedule WHERE GroupID = ? ORDER BY DayOfWeek, StartTime";
+            $stmtSch = $this->db->prepare($schedSql);
+            $stmtSch->execute([$g['GroupID']]);
+            $g['Schedule'] = $stmtSch->fetchAll(PDO::FETCH_ASSOC);
+        }
 
-        // View'a gönderilecek veriler
-        $data = [
-            'groups'    => $groups,
-            'trainers'  => $trainers,
-            'clubId'    => $clubId,
-            'role'      => $role
-        ];
+        // Antrenörleri Çek
+        // Sadece 3 numaralı rolü (Antrenör) getirir. 
+        $sqlCoaches = "SELECT UserID, FullName FROM Users WHERE ClubID = ? AND RoleID = 3 AND IsActive = 1";
+        $stmtCoaches = $this->db->prepare($sqlCoaches);
+        $stmtCoaches->execute([$clubId]);
+        $coaches = $stmtCoaches->fetchAll(PDO::FETCH_ASSOC);
 
-        $this->render('groups', $data);
+        $this->render('groups', ['groups' => $groups, 'coaches' => $coaches]);
     }
 
-    // store, update ve render metodları aynı kalacak...
+    // --- KAYDET / GÜNCELLE ---
     public function store() {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $clubId    = $_POST['club_id'] ?? $_SESSION['club_id'];
-            $name      = trim($_POST['group_name'] ?? '');
-            $trainerId = !empty($_POST['trainer_id']) ? $_POST['trainer_id'] : NULL;
+            try {
+                $this->db->beginTransaction();
+                $clubId = $_SESSION['selected_club_id'] ?? $_SESSION['club_id'];
+                
+                $groupId = $_POST['group_id'] ?? null;
+                $groupName = trim($_POST['group_name']);
+                $coachId = !empty($_POST['coach_id']) ? $_POST['coach_id'] : null;
 
-            if (empty($name)) {
-                header("Location: index.php?page=groups&error=empty_name");
+                // 1. GRUBU EKLE VEYA GÜNCELLE
+                if (!empty($groupId)) {
+                    // Update
+                    $sql = "UPDATE Groups SET GroupName = ?, CoachID = ? WHERE GroupID = ? AND ClubID = ?";
+                    $this->db->prepare($sql)->execute([$groupName, $coachId, $groupId, $clubId]);
+                    
+                    // Eski programı temizle (Sıfırdan ekleyeceğiz)
+                    $this->db->prepare("DELETE FROM GroupSchedule WHERE GroupID = ?")->execute([$groupId]);
+                } else {
+                    // Insert
+                    $sql = "INSERT INTO Groups (ClubID, GroupName, CoachID, CreatedAt) VALUES (?, ?, ?, GETDATE())";
+                    $this->db->prepare($sql)->execute([$clubId, $groupName, $coachId]);
+                    $groupId = $this->db->lastInsertId();
+                }
+
+                // 2. DERS PROGRAMINI EKLE (Critical Fix: Foreach kullanımı)
+                if (isset($_POST['days']) && is_array($_POST['days'])) {
+                    $days = $_POST['days'];
+                    $starts = $_POST['starts'];
+                    $ends = $_POST['ends'];
+
+                    $insSch = $this->db->prepare("INSERT INTO GroupSchedule (GroupID, DayOfWeek, StartTime, EndTime) VALUES (?, ?, ?, ?)");
+
+                    // Döngüyü indeks ile değil, key ile dönüyoruz (Kayma olmasın diye)
+                    foreach ($days as $key => $dayVal) {
+                        $startVal = $starts[$key] ?? null;
+                        $endVal = $ends[$key] ?? null;
+
+                        if (!empty($dayVal) && !empty($startVal) && !empty($endVal)) {
+                            $insSch->execute([$groupId, $dayVal, $startVal, $endVal]);
+                        }
+                    }
+                }
+
+                $this->db->commit();
+                $_SESSION['success_message'] = "İşlem başarıyla kaydedildi.";
+                header("Location: index.php?page=groups");
+                exit;
+
+            } catch (Exception $e) {
+                if ($this->db->inTransaction()) $this->db->rollBack();
+                die("Kayıt Hatası: " . $e->getMessage());
+            }
+        }
+    }
+
+    // --- SİL ---
+    public function delete() {
+        $id = $_GET['id'] ?? null;
+        if ($id) {
+            // Öğrenci kontrolü
+            $check = $this->db->prepare("SELECT COUNT(*) FROM Students WHERE GroupID = ? AND IsActive = 1");
+            $check->execute([$id]);
+            if ($check->fetchColumn() > 0) {
+                echo "<script>alert('Bu grupta aktif öğrenciler var! Silinemez.'); window.location.href='index.php?page=groups';</script>";
                 exit;
             }
 
-            try {
-                $stmt = $this->db->prepare("INSERT INTO Groups (GroupName, TrainerID, ClubID, CreatedAt) VALUES (?, ?, ?, GETDATE())");
-                $stmt->execute([$name, $trainerId, $clubId]);
-                header("Location: index.php?page=groups&success=created");
-            } catch (PDOException $e) {
-                die("Kayıt Hatası: " . $e->getMessage());
-            }
-            exit;
+            $this->db->prepare("DELETE FROM Groups WHERE GroupID = ?")->execute([$id]);
+            $_SESSION['success_message'] = "Grup silindi.";
         }
-    }
-
-    public function update() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $groupId   = $_POST['group_id'] ?? null;
-            $name      = trim($_POST['group_name'] ?? '');
-            $trainerId = !empty($_POST['trainer_id']) ? $_POST['trainer_id'] : NULL;
-
-            try {
-                $stmt = $this->db->prepare("UPDATE Groups SET GroupName = ?, TrainerID = ? WHERE GroupID = ?");
-                $stmt->execute([$name, $trainerId, $groupId]);
-                header("Location: index.php?page=groups&success=updated");
-            } catch (PDOException $e) {
-                die("Güncelleme Hatası: " . $e->getMessage());
-            }
-            exit;
-        }
+        header("Location: index.php?page=groups");
+        exit;
     }
 
     private function render($view, $data = []) {
+        if(isset($_SESSION)) $data = array_merge($_SESSION, $data);
         extract($data);
         ob_start();
-        include __DIR__ . "/../Views/admin/{$view}.php";
+        $baseDir = __DIR__ . '/../';
+        $viewsFolder = is_dir($baseDir . 'Views') ? 'Views' : 'views';
+        $viewFile = $baseDir . $viewsFolder . "/admin/{$view}.php";
+        if (file_exists($viewFile)) include $viewFile;
         $content = ob_get_clean();
-        include __DIR__ . '/../Views/layouts/admin_layout.php';
+        $layoutPath = $baseDir . $viewsFolder . '/layouts/admin_layout.php';
+        if (file_exists($layoutPath)) include $layoutPath; else echo $content;
     }
 }

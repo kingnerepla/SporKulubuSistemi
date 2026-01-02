@@ -92,21 +92,33 @@ switch ($page) {
     case 'student_destroy':  safe_load('StudentController', 'destroy'); break; // [YENİ EKLENDİ] Tamamen siler
 
     // --- GRUPLAR VE TAKVİM ---
-    case 'groups':           safe_load('GroupController', 'index'); break;
-    case 'group_add':        safe_load('GroupController', 'create'); break;
-    case 'group_update':     safe_load('GroupController', 'update'); break;
+    // ... diğer case'ler ...
+
+    // --- GRUP YÖNETİMİ ROTALARI ---
+    case 'groups':       safe_load('GroupController', 'index'); break;
+    case 'group_store':  safe_load('GroupController', 'store'); break;
+    case 'group_delete': safe_load('GroupController', 'delete'); break;
+
+    // ... diğer case'ler ...
     case 'training_groups':  safe_load('GroupScheduleController', 'trainingGroups'); break;
     case 'generate_sessions': safe_load('GroupScheduleController', 'generateSessions'); break;
     case 'delete_sessions':  safe_load('GroupScheduleController', 'deleteSessions'); break;
     case 'delete_single_session': safe_load('GroupScheduleController', 'deleteSingleSession'); break;
 
     // --- YOKLAMA ---
+    // index.php dosyasının switch-case yapısı içinde:
+
     case 'attendance':       safe_load('AttendanceController', 'index'); break;
     case 'attendance_save':  safe_load('AttendanceController', 'save'); break;
-    case 'attendance_report': safe_load('AttendanceController', 'report'); break;
+    case 'attendance_report': safe_load('AttendanceReportController', 'index'); break;
+    case 'student_archive_store': safe_load('StudentController', 'archive_store'); break;
 
     // --- ANTRENÖR ---
-    case 'coaches':          safe_load('CoachController', 'index'); break;
+    case 'coach_list':        safe_load('CoachController', 'index'); break;
+    case 'coach_store':       safe_load('CoachController', 'store'); break;
+    case 'coach_delete':      safe_load('CoachController', 'delete'); break;      // Pasife Alma
+    case 'coach_restore':     safe_load('CoachController', 'restore'); break;     // Geri Yükleme
+    case 'coach_hard_delete': safe_load('CoachController', 'hard_delete'); break; // Kalıcı Silme
     
     // --- FİNANS & ÖDEMELER ---
     case 'club_finance':     safe_load('ClubFinanceController', 'index'); break;
@@ -127,10 +139,12 @@ switch ($page) {
     case 'parent_dashboard':  safe_load('ParentController', 'dashboard'); break;
     case 'parent_attendance': safe_load('ParentController', 'attendance'); break;
     case 'parent_payments':   safe_load('ParentController', 'payments'); break;
-    
+
+    // --- GİDER YÖNETİMİ (YENİ) ---
     case 'expenses':       safe_load('ExpensesController', 'index'); break;
     case 'expense_store':  safe_load('ExpensesController', 'store'); break;
     case 'expense_delete': safe_load('ExpensesController', 'delete'); break;
+
     // --- PROFİL & SİSTEM ---
     case 'profile':          safe_load('ProfileController', 'index'); break;
     case 'logout':           
