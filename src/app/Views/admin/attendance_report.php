@@ -1,6 +1,6 @@
-<div class="container-fluid py-4">
+<div class="container-fluid py-4" id="reportContainer">
 
-    <div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card border-0 shadow-sm rounded-4 mb-4 d-print-none">
         <div class="card-body p-4">
             <h5 class="fw-bold text-primary mb-3"><i class="fa-solid fa-chart-column me-2"></i>Aylık Yoklama Raporu</h5>
             
@@ -47,78 +47,85 @@
                     </select>
                 </div>
                 
-                <div class="col-md-2 text-end">
-                     <button type="button" class="btn btn-outline-success w-100" onclick="window.print()">
-                        <i class="fa-solid fa-print me-1"></i>Yazdır
-                     </button>
+                <div class="col-md-2 text-end d-flex gap-2">
+                    <button type="button" class="btn btn-outline-success w-100" onclick="window.print()">
+                        <i class="fa-solid fa-print"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-primary w-100" onclick="sendQuickMail()">
+                        <i class="fa-solid fa-envelope"></i>
+                    </button>
+        
                 </div>
             </form>
         </div>
     </div>
 
+    <div class="d-none d-print-block text-center mb-3">
+        <h3>SPOR CRM - YOKLAMA ÇİZELGESİ</h3>
+        <p>
+            <strong>Grup:</strong> 
+            <?php foreach($groups as $g) { if($g['GroupID'] == $selectedGroupId) echo $g['GroupName']; } ?> 
+            &nbsp;|&nbsp; 
+            <strong>Tarih:</strong> <?= $months[$selectedMonth] ?> <?= $selectedYear ?>
+        </p>
+    </div>
+
     <?php if(!empty($students)): 
-        // Seçilen ayın kaç gün çektiğini bul
-        $daysInMonth = cal_days_in_month(CAL_GREGORIAN, $selectedMonth, $selectedYear);
+        $daysInMonth = date('t', mktime(0, 0, 0, $selectedMonth, 1, $selectedYear));
     ?>
-    <div class="card border-0 shadow rounded-4 overflow-hidden">
-        <div class="table-responsive">
-            <table class="table table-bordered table-hover text-center align-middle mb-0" style="font-size: 0.85rem;">
+    <div class="card border-0 shadow rounded-4 overflow-visible-print">
+        <div class="table-responsive-print">
+            <table class="table table-bordered table-sm text-center align-middle mb-0 print-table">
                 <thead class="bg-light text-secondary">
                     <tr>
-                        <th class="ps-3 text-start bg-white position-sticky start-0" style="min-width: 200px; z-index:10;">Öğrenci Adı</th>
-                        <th class="bg-white text-muted" style="min-width: 60px;">Katılım</th>
+                        <th class="text-start bg-white" style="min-width: 150px;">Öğrenci Adı</th>
+                        <th class="bg-white text-muted">Top.</th>
                         
                         <?php for($d=1; $d<=$daysInMonth; $d++): 
-                            // O gün ders var mıydı? (Varsa sütun başlığını koyu yap)
                             $isLessonDay = isset($lessonDays[$d]);
-                            $bgClass = $isLessonDay ? 'bg-primary text-white bg-opacity-75' : '';
+                            $bgClass = $isLessonDay ? 'bg-primary text-white' : '';
+                            $style = $isLessonDay ? 'background-color: #0d6efd !important; color: white !important; -webkit-print-color-adjust: exact;' : '';
                         ?>
-                            <th class="<?= $bgClass ?>" style="width: 35px; min-width: 35px;"><?= $d ?></th>
+                            <th class="<?= $bgClass ?>" style="width: 25px; <?= $style ?>"><?= $d ?></th>
                         <?php endfor; ?>
                     </tr>
                 </thead>
                 <tbody>
                     <?php foreach($students as $s): 
                         $sid = $s['StudentID'];
-                        $presentCount = 0; // O ay kaç kere gelmiş?
-                        
-                        // Önce sayalım
+                        $presentCount = 0;
+                        // Toplamı Hesapla (Gevşek karşılaştırma == kullanılır)
                         for($d=1; $d<=$daysInMonth; $d++) {
-                            if(isset($attendanceData[$sid][$d]) && $attendanceData[$sid][$d] == 1) {
-                                $presentCount++;
-                            }
+                            if(isset($attendanceData[$sid][$d]) && $attendanceData[$sid][$d] == 1) $presentCount++;
                         }
                     ?>
                     <tr>
-                        <td class="ps-3 text-start fw-bold text-dark position-sticky start-0 bg-white" style="z-index:10; border-right: 2px solid #eee;">
+                        <td class="text-start fw-bold text-dark text-nowrap">
                             <?= htmlspecialchars($s['FullName']) ?>
                         </td>
 
-                        <td>
-                            <span class="badge bg-info text-dark bg-opacity-10 border border-info border-opacity-25 rounded-pill">
-                                <?= $presentCount ?> Ders
-                            </span>
-                        </td>
+                        <td class="fw-bold bg-light"><?= $presentCount ?></td>
 
                         <?php for($d=1; $d<=$daysInMonth; $d++): 
-                            $status = $attendanceData[$sid][$d] ?? null; // 1: Geldi, 0: Gelmedi, null: Kayıt Yok
+                            $status = $attendanceData[$sid][$d] ?? null;
                             $cellContent = '';
-                            $cellClass = '';
+                            $cellStyle = '';
 
-                            if ($status === 1) { // GELDİ
-                                $cellContent = '<i class="fa-solid fa-check"></i>';
-                                $cellClass = 'text-success bg-success bg-opacity-10 fw-bold';
-                            } elseif ($status === 0) { // GELMEDİ (Ama ders varmış)
-                                $cellContent = '<i class="fa-solid fa-xmark"></i>';
-                                $cellClass = 'text-danger bg-danger bg-opacity-10';
+                            // DÜZELTME BURADA YAPILDI: === yerine == kullanıldı
+                            if ($status == 1) { // GELDİ ("1" veya 1)
+                                $cellContent = '&#10003;'; // Tik İşareti
+                                $cellStyle = 'background-color: #d1e7dd !important; color: #0f5132 !important; font-weight:bold;';
+                            } elseif ($status !== null && $status == 0) { // GELMEDİ ("0" veya 0)
+                                $cellContent = '&#10007;'; // Çarpı İşareti
+                                $cellStyle = 'background-color: #f8d7da !important; color: #842029 !important;';
                             } else {
-                                // Kayıt yok. Eğer o gün başkalarına yoklama alınmışsa (ders günüyse), bu öğrenci yok yazılmalı veya boş
                                 if (isset($lessonDays[$d])) {
-                                    $cellContent = '<span class="text-muted opacity-25">-</span>';
+                                    $cellContent = '-';
+                                    $cellStyle = 'color: #ccc;';
                                 }
                             }
                         ?>
-                            <td class="<?= $cellClass ?> p-0"><?= $cellContent ?></td>
+                            <td style="<?= $cellStyle ?> -webkit-print-color-adjust: exact; font-size: 10px; padding: 2px;"><?= $cellContent ?></td>
                         <?php endfor; ?>
                     </tr>
                     <?php endforeach; ?>
@@ -127,7 +134,7 @@
         </div>
     </div>
     
-    <div class="mt-3 text-muted small">
+    <div class="mt-3 text-muted small d-print-none">
         <i class="fa-solid fa-check text-success me-1"></i>: Derse Katıldı &nbsp;|&nbsp; 
         <i class="fa-solid fa-xmark text-danger me-1"></i>: Devamsız
     </div>
@@ -142,12 +149,39 @@
 </div>
 
 <style>
-    /* Yazdırma Ayarları */
+    .overflow-visible-print { overflow: hidden; }
+    .table-responsive-print { overflow-x: auto; }
+
     @media print {
-        body * { visibility: hidden; }
-        .card-body, .card-body * { visibility: visible; }
-        .card-body { position: absolute; left: 0; top: 0; width: 100%; }
-        .position-sticky { position: static !important; } /* Yazıcıda sticky sorun çıkarır */
-        .btn { display: none; } /* Butonları gizle */
+        @page { size: landscape; margin: 5mm; }
+        body { visibility: hidden; background-color: white !important; }
+        #sidebar-wrapper, .navbar, .btn, .d-print-none, form { display: none !important; }
+        #reportContainer { visibility: visible; position: absolute; left: 0; top: 0; width: 100%; margin: 0 !important; padding: 0 !important; }
+        #reportContainer * { visibility: visible; }
+        .card { border: none !important; box-shadow: none !important; }
+        .table-responsive-print { overflow: visible !important; }
+        table { width: 100% !important; font-size: 10px !important; border-collapse: collapse !important; }
+        th, td { padding: 2px !important; border: 1px solid #999 !important; }
+        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
     }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+function sendQuickMail() {
+    Swal.fire({
+        title: 'Rapor Gönderiliyor...',
+        text: 'Lütfen bekleyin, rapor kayıtlı e-posta adresinize iletiliyor.',
+        allowOutsideClick: false,
+        didOpen: () => {
+            Swal.showLoading();
+            const groupId = '<?= $selectedGroupId ?>';
+            const month = '<?= $selectedMonth ?>';
+            const year = '<?= $selectedYear ?>';
+            
+            // Kullanıcıya sormadan direkt kayıtlı mailine gönderiyoruz
+            window.location.href = `index.php?page=attendance_report_mail&group_id=${groupId}&month=${month}&year=${year}`;
+        }
+    });
+}
+</script>

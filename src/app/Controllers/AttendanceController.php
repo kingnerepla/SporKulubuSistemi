@@ -138,7 +138,60 @@ class AttendanceController {
         $sql = "UPDATE Students SET RemainingSessions = RemainingSessions + ? WHERE StudentID = ?";
         $this->db->prepare($sql)->execute([$amount, $studentId]);
     }
-
+    public function sendMail() {
+        $clubId = $_SESSION['selected_club_id'] ?? $_SESSION['club_id'];
+        $groupId = $_GET['group_id'];
+        $month = $_GET['month'];
+        $year = $_GET['year'];
+        $toEmail = $_GET['email'] ?? $_SESSION['email']; // Varsayılan: Giriş yapanın maili
+    
+        // 1. Grup Adını Al
+        $stmt = $this->db->prepare("SELECT GroupName FROM Groups WHERE GroupID = ?");
+        $stmt->execute([$groupId]);
+        $groupName = $stmt->fetchColumn();
+    
+        // 2. Basit HTML İçerik Oluştur (Özet Rapor)
+        $subject = "Yoklama Raporu: $groupName ($month/$year)";
+        
+        $message = "<html><body>";
+        $message .= "<h2>$groupName - Aylık Yoklama Özeti</h2>";
+        $message .= "<p><b>Dönem:</b> $month / $year</p>";
+        $message .= "<table border='1' cellpadding='5' style='border-collapse: collapse;'>";
+        $message .= "<tr><th>Öğrenci</th><th>Toplam Katılım</th></tr>";
+    
+        // Öğrenci verilerini çek
+        $stuSql = "SELECT StudentID, FullName FROM Students WHERE GroupID = ? AND IsActive = 1";
+        $stmtStu = $this->db->prepare($stuSql);
+        $stmtStu->execute([$groupId]);
+        $students = $stmtStu->fetchAll(PDO::FETCH_ASSOC);
+    
+        foreach($students as $s) {
+            $attSql = "SELECT COUNT(*) FROM Attendance WHERE StudentID = ? AND GroupID = ? AND MONTH([Date]) = ? AND YEAR([Date]) = ? AND IsPresent = 1";
+            $stmtAtt = $this->db->prepare($attSql);
+            $stmtAtt->execute([$s['StudentID'], $groupId, $month, $year]);
+            $count = $stmtAtt->fetchColumn();
+            
+            $message .= "<tr><td>{$s['FullName']}</td><td align='center'>$count Ders</td></tr>";
+        }
+        
+        $message .= "</table><br><p>Bu rapor Spor CRM sistemi tarafından otomatik oluşturulmuştur.</p>";
+        $message .= "</body></html>";
+    
+        // 3. Mail Başlıkları
+        $headers = "MIME-Version: 1.0" . "\r\n";
+        $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
+        $headers .= "From: noreply@sporcrm.com" . "\r\n";
+    
+        // 4. Gönder
+        if(mail($toEmail, $subject, $message, $headers)) {
+            $_SESSION['success_message'] = "Rapor özeti $toEmail adresine başarıyla gönderildi.";
+        } else {
+            $_SESSION['error_message'] = "Mail gönderimi sırasında bir hata oluştu.";
+        }
+    
+        header("Location: index.php?page=attendance_report&group_id=$groupId&month=$month&year=$year");
+        exit;
+    }
     private function render($view, $data = []) {
         if(isset($_SESSION)) $data = array_merge($_SESSION, $data);
         extract($data);

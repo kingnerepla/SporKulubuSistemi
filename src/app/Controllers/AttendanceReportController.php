@@ -27,7 +27,33 @@ class AttendanceReportController {
             }
         }
     }
-
+    public function sendMail() {
+        $clubId = $_SESSION['selected_club_id'] ?? $_SESSION['club_id'];
+        $groupId = $_GET['group_id'] ?? null;
+        $month = $_GET['month'] ?? date('m');
+        $year = $_GET['year'] ?? date('Y');
+        
+        // ÖNEMLİ: Dışarıdan email gelmezse oturum açan kişinin mailini al
+        $toEmail = $_GET['email'] ?? $_SESSION['email']; 
+    
+        if (!$groupId) {
+            header("Location: index.php?page=attendance_report");
+            exit;
+        }
+    
+        // ... (Geri kalan mail hazırlama kodları aynı kalacak) ...
+        // $groupName çekme, $message oluşturma vs.
+        
+        // En sonda yönlendirme yaparken kullanıcıya bilgi verelim
+        if(mail($toEmail, $subject, $message, $headers)) {
+            $_SESSION['success_message'] = "Rapor, kayıtlı adresiniz olan $toEmail adresine gönderildi.";
+        } else {
+            $_SESSION['error_message'] = "Mail gönderilirken bir hata oluştu.";
+        }
+    
+        header("Location: index.php?page=attendance_report&group_id=$groupId&month=$month&year=$year");
+        exit;
+    }
     public function index() {
         $clubId = $_SESSION['selected_club_id'] ?? $_SESSION['club_id'];
         

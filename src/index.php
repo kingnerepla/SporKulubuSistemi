@@ -112,7 +112,8 @@ switch ($page) {
     case 'attendance_save':  safe_load('AttendanceController', 'save'); break;
     case 'attendance_report': safe_load('AttendanceReportController', 'index'); break;
     case 'student_archive_store': safe_load('StudentController', 'archive_store'); break;
-
+    case 'attendance_report_mail': safe_load('AttendanceReportController', 'sendMail'); break;
+    
     // --- ANTRENÖR ---
     case 'coach_list':        safe_load('CoachController', 'index'); break;
     case 'coach_store':       safe_load('CoachController', 'store'); break;
