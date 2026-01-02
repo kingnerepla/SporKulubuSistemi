@@ -86,9 +86,10 @@ switch ($page) {
     case 'student_edit':     safe_load('StudentController', 'edit'); break;
     case 'student_update':   safe_load('StudentController', 'update'); break;
     case 'student_store':    safe_load('StudentController', 'store'); break;
-    case 'student_delete':   safe_load('StudentController', 'delete'); break;
+    case 'student_delete':   safe_load('StudentController', 'delete'); break; // Arşive atar (Soft Delete)
     case 'students_archived': safe_load('StudentController', 'archived'); break;
     case 'student_restore':  safe_load('StudentController', 'restore'); break;
+    case 'student_destroy':  safe_load('StudentController', 'destroy'); break; // [YENİ EKLENDİ] Tamamen siler
 
     // --- GRUPLAR VE TAKVİM ---
     case 'groups':           safe_load('GroupController', 'index'); break;
@@ -107,23 +108,18 @@ switch ($page) {
     // --- ANTRENÖR ---
     case 'coaches':          safe_load('CoachController', 'index'); break;
     
-    // --- FİNANS & ÖDEMELER (BURASI DÜZENLENDİ) ---
+    // --- FİNANS & ÖDEMELER ---
     case 'club_finance':     safe_load('ClubFinanceController', 'index'); break;
-    // MEVCUT case 'payments' SATIRINI SİL, BUNU YAPIŞTIR:
     
-        // MEVCUT case 'payments' SATIRINI SİLİP BUNU YAPIŞTIR:
+    // Payments için senin eklediğin özel debug bloğu
     case 'payments':
-        // Hataları açıyoruz ki beyaz ekran gelmesin
         ini_set('display_errors', 1);
         error_reporting(E_ALL);
-        
-        // Dosyayı manuel çağırıyoruz
-        require_once __DIR__ . '/app/Controllers/PaymentController.php';
-        
-        // Controller'ı başlatıyoruz
+        require_once $basePath . '/app/Controllers/PaymentController.php';
         $controller = new PaymentController();
         $controller->index();
         break;
+        
     case 'payment_store':    safe_load('PaymentController', 'store'); break; 
     case 'payment_delete':   safe_load('PaymentController', 'delete'); break;
 
@@ -131,7 +127,10 @@ switch ($page) {
     case 'parent_dashboard':  safe_load('ParentController', 'dashboard'); break;
     case 'parent_attendance': safe_load('ParentController', 'attendance'); break;
     case 'parent_payments':   safe_load('ParentController', 'payments'); break;
-
+    
+    case 'expenses':       safe_load('ExpensesController', 'index'); break;
+    case 'expense_store':  safe_load('ExpensesController', 'store'); break;
+    case 'expense_delete': safe_load('ExpensesController', 'delete'); break;
     // --- PROFİL & SİSTEM ---
     case 'profile':          safe_load('ProfileController', 'index'); break;
     case 'logout':           

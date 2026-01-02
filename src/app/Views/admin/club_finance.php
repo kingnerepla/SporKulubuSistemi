@@ -71,7 +71,6 @@
 <?php 
 /**
  * Öğrenci Kartı Render Fonksiyonu
- * Tasarımın her yerde aynı kalması ve kodun temiz görünmesi için.
  */
 function renderStudentCard($st, $color, $label) { ?>
     <div class="col-md-6 col-lg-4">
@@ -112,6 +111,7 @@ function renderStudentCard($st, $color, $label) { ?>
                                 data-bs-target="#hist_<?= $st['StudentID'] ?>">
                             <i class="fa-solid fa-list-ul me-1"></i> Geçmiş
                         </button>
+                        
                         <a href="index.php?page=payments&student_id=<?= $st['StudentID'] ?>" 
                            class="btn btn-<?= $color == 'danger' ? 'danger' : 'dark' ?> btn-sm w-100 rounded-pill fw-bold shadow-sm">
                            <i class="fa-solid fa-cash-register me-1"></i> Tahsil Et

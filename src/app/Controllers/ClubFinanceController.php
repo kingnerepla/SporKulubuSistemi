@@ -1,13 +1,14 @@
 <?php
 
 class ClubFinanceController {
-    // 1. ÖNEMLİ: db değişkenini private olarak tanımlıyoruz
     private $db;
 
     public function __construct() {
-        // 2. Database sınıfı index.php'de yüklendiği için direkt kullanıyoruz
-        // Eğer Database sınıfı bulunamazsa veya bağlantı başarısızsa hata vermesini sağlıyoruz
         try {
+            if (file_exists(__DIR__ . '/../Config/Database.php')) {
+                require_once __DIR__ . '/../Config/Database.php';
+            }
+            
             if (class_exists('Database')) {
                 $dbInstance = new Database();
                 $this->db = $dbInstance->getConnection();
@@ -32,13 +33,14 @@ class ClubFinanceController {
         }
 
         try {
-            // Artık $this->db dolu olduğu için prepare() hata vermeyecektir
+            // Öğrenci verilerini, toplam ödemelerini ve bir sonraki ödeme tarihlerini çekiyoruz
             $query = "SELECT s.StudentID, s.FullName, g.GroupName, s.NextPaymentDate,
                       (SELECT SUM(Amount) FROM Payments WHERE StudentID = s.StudentID) as TotalPaid,
                       (SELECT COUNT(*) FROM Payments WHERE StudentID = s.StudentID) as PaidMonths
                       FROM Students s
                       LEFT JOIN Groups g ON s.GroupID = g.GroupID
-                      WHERE s.ClubID = ? AND s.IsActive = 1";
+                      WHERE s.ClubID = ? AND s.IsActive = 1
+                      ORDER BY s.NextPaymentDate ASC"; // Tarihi yaklaşan en üstte
             
             $stmt = $this->db->prepare($query);
             $stmt->execute([$clubId]);
@@ -47,8 +49,9 @@ class ClubFinanceController {
             $today = strtotime('today');
             $nextWeek = strtotime('+7 days');
 
+            // Her öğrenci için işlem yap
             foreach ($students as &$st) {
-                // Her öğrencinin son 12 ödeme kaydı
+                // 1. Son 12 Ödeme Geçmişini Çek (SQL Server için TOP 12)
                 $histStmt = $this->db->prepare("SELECT TOP 12 Amount, PaymentMonth, PaymentDate 
                                                 FROM Payments 
                                                 WHERE StudentID = ? 
@@ -56,6 +59,7 @@ class ClubFinanceController {
                 $histStmt->execute([$st['StudentID']]);
                 $st['payment_history'] = $histStmt->fetchAll(PDO::FETCH_ASSOC);
                 
+                // 2. Durum Belirle (Gecikmiş mi? Yaklaşıyor mu?)
                 $paymentTime = !empty($st['NextPaymentDate']) ? strtotime($st['NextPaymentDate']) : null;
 
                 $st['is_overdue'] = ($paymentTime !== null && $paymentTime < $today);
@@ -71,15 +75,23 @@ class ClubFinanceController {
     }
 
     private function render($view, $data = []) {
+        if(isset($_SESSION)) $data = array_merge($_SESSION, $data);
         extract($data);
         ob_start();
-        $viewPath = __DIR__ . "/../Views/admin/{$view}.php";
+        
+        $baseDir = __DIR__ . '/../';
+        $viewsFolder = is_dir($baseDir . 'Views') ? 'Views' : 'views';
+        $viewPath = $baseDir . $viewsFolder . "/admin/{$view}.php";
+
         if (file_exists($viewPath)) {
             include $viewPath;
         } else {
             die("Görünüm dosyası bulunamadı: $viewPath");
         }
+        
         $content = ob_get_clean();
-        include __DIR__ . '/../Views/layouts/admin_layout.php';
+        $layoutPath = $baseDir . $viewsFolder . '/layouts/admin_layout.php';
+        
+        if (file_exists($layoutPath)) include $layoutPath; else echo $content;
     }
 }
