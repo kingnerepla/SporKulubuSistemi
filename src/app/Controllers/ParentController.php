@@ -1,139 +1,103 @@
 <?php
-// Hata raporlamayı aç
-ini_set('display_errors', 1);
-error_reporting(E_ALL);
-
-class PaymentController {
+class ParentController {
     private $db;
 
     public function __construct() {
-        // Veritabanı bağlantısı
-        if (file_exists(__DIR__ . '/../Config/Database.php')) require_once __DIR__ . '/../Config/Database.php';
-        if (class_exists('Database')) {
-            $this->db = (new Database())->getConnection();
-        } else {
-            die("Veritabanı bağlantı dosyası yüklenemedi.");
-        }
-    }
-
-    public function index() {
-        $clubId = $_SESSION['selected_club_id'] ?? $_SESSION['club_id'] ?? null;
-        $studentFilter = $_GET['student_id'] ?? null;
+        if (session_status() === PHP_SESSION_NONE) session_start();
         
-        // Session mesajlarını al ve sil
-        $error = $_SESSION['error_message'] ?? null;
-        $success = $_SESSION['success_message'] ?? null;
-        unset($_SESSION['error_message'], $_SESSION['success_message']);
-
-        try {
-            // 1. Ödemeler
-            $sql = "SELECT p.*, s.FullName as StudentName, g.GroupName 
-                    FROM Payments p 
-                    INNER JOIN Students s ON p.StudentID = s.StudentID 
-                    LEFT JOIN Groups g ON s.GroupID = g.GroupID 
-                    WHERE p.ClubID = ?";
-            if ($studentFilter) { $sql .= " AND p.StudentID = " . (int)$studentFilter; }
-            $sql .= " ORDER BY p.PaymentDate DESC";
-
-            $stmt = $this->db->prepare($sql);
-            $stmt->execute([$clubId]);
-            $payments = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            // 2. Kasa
-            $totalIncome = 0;
-            foreach ($payments as $pay) { $totalIncome += (float)$pay['Amount']; }
-
-            // 3. Öğrenciler
-            $stmtSt = $this->db->prepare("SELECT StudentID, FullName, MonthlyFee FROM Students WHERE ClubID = ? AND IsActive = 1");
-            $stmtSt->execute([$clubId]);
-            $students = $stmtSt->fetchAll(PDO::FETCH_ASSOC);
-
-            // 4. Render'a gönder
-            $this->render('payments', [
-                'payments' => $payments,
-                'totalIncome' => $totalIncome,
-                'students' => $students,
-                'error' => $error,
-                'success' => $success
-            ]);
-
-        } catch (Exception $e) {
-            die("Veri Hatası: " . $e->getMessage());
+        // Güvenlik: Sadece veli girebilir
+        if (($_SESSION['role'] ?? '') !== 'parent') {
+            header("Location: index.php?page=login");
+            exit;
         }
-    }
 
-    public function store() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            try {
-                $this->db->beginTransaction();
-                
-                // Collection Tipi ile Kayıt
-                $stmt = $this->db->prepare("INSERT INTO Payments 
-                    ([StudentID], [Amount], [PaymentType], [Description], [PaymentDate], [PaymentMonth], [ClubID], [Type], [CreatedBy]) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                
-                $stmt->execute([
-                    $_POST['student_id'], $_POST['amount'], $_POST['payment_type'], 
-                    $_POST['description'] ?? 'Aidat Tahsilatı', $_POST['payment_date'], 
-                    $_POST['payment_month'], ($_SESSION['selected_club_id'] ?? $_SESSION['club_id']), 
-                    'Collection', ($_SESSION['user_id'] ?? 1)
-                ]);
-
-                $this->db->prepare("UPDATE Students SET NextPaymentDate = ? WHERE StudentID = ?")
-                         ->execute([$_POST['next_payment_date'], $_POST['student_id']]);
-
-                $this->db->commit();
-                $_SESSION['success_message'] = "Tahsilat kaydedildi.";
-                header("Location: index.php?page=payments");
-                exit();
-
-            } catch (Exception $e) {
-                if ($this->db->inTransaction()) $this->db->rollBack();
-                $_SESSION['error_message'] = "Hata: " . $e->getMessage();
-                header("Location: index.php?page=payments");
-                exit();
-            }
-        }
+        if (file_exists(__DIR__ . '/../Config/Database.php')) require_once __DIR__ . '/../Config/Database.php';
+        $this->db = (new Database())->getConnection();
     }
 
     /**
-     * MENÜLERİ GETİREN SİHİRLİ FONKSİYON
+     * VELİ: Ödeme Geçmişi Sayfası
+     */
+    public function payments() {
+        $parentId = $_SESSION['user_id'];
+
+        // 1. Velinin Çocuklarını Bul
+        $stmt = $this->db->prepare("SELECT StudentID, FullName, RemainingSessions FROM Students WHERE ParentID = ? AND IsActive = 1");
+        $stmt->execute([$parentId]);
+        $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // 2. Her Çocuğun Ödemelerini Çek (Senin tablonun sütun isimlerine göre)
+        foreach ($students as &$stu) {
+            $stmtPay = $this->db->prepare("
+                SELECT Amount, PaymentDate, PaymentType, Description, PaymentMonth 
+                FROM Payments 
+                WHERE StudentID = ? 
+                ORDER BY PaymentDate DESC
+            ");
+            $stmtPay->execute([$stu['StudentID']]);
+            $stu['payments'] = $stmtPay->fetchAll(PDO::FETCH_ASSOC);
+        }
+
+        $this->render('parent/payments', ['students' => $students]);
+    }
+
+    /**
+     * VELİ: Yoklama Geçmişi Sayfası
+     */
+    public function attendance() {
+        $parentId = $_SESSION['user_id'];
+    
+        // 1. Velinin Çocuklarını Bul
+        $stmt = $this->db->prepare("SELECT StudentID, FullName FROM Students WHERE ParentID = ? AND IsActive = 1");
+        $stmt->execute([$parentId]);
+        $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+        // Verileri toplu bir yapıya sokuyoruz
+        foreach ($students as &$stu) {
+            $stmtAtt = $this->db->prepare("
+                SELECT [Date] as AttendanceDate, IsPresent as Status 
+                FROM Attendance 
+                WHERE StudentID = ? 
+                ORDER BY [Date] DESC
+            ");
+            $stmtAtt->execute([$stu['StudentID']]);
+            $stu['history'] = $stmtAtt->fetchAll(PDO::FETCH_ASSOC);
+    
+            // İstatistikleri hesapla
+            $present = 0;
+            foreach($stu['history'] as $h) { if($h['Status'] == 1) $present++; }
+            $stu['stats'] = [
+                'present' => $present,
+                'absent' => count($stu['history']) - $present
+            ];
+        }
+    
+        // BURAYA DİKKAT: Dosya ismini attendance_view olarak güncelledim
+        $this->render('parent/attendance_view', ['students' => $students]);
+    }
+
+    /**
+     * DİNAMİK RENDER (Veli Klasörüne Bakar)
      */
     private function render($view, $data = []) {
-        // Session verilerini görünüm için birleştir (Layout dosyasının ihtiyaç duyduğu veriler)
-        if(isset($_SESSION)) {
-            $data = array_merge($_SESSION, $data);
-        }
-        
+        if(isset($_SESSION)) $data = array_merge($_SESSION, $data);
         extract($data);
         
-        // 1. İçeriği Hazırla
         ob_start();
         $baseDir = __DIR__ . '/../';
-        
-        // KLASÖR ADI TESPİTİ (Views mi views mi?)
         $viewsFolder = is_dir($baseDir . 'Views') ? 'Views' : 'views';
         
-        $viewFile = $baseDir . $viewsFolder . "/admin/{$view}.php";
+        // Veli klasöründeki dosyayı yükle
+        $viewFile = $baseDir . $viewsFolder . "/{$view}.php";
+        
         if (file_exists($viewFile)) {
             include $viewFile;
         } else {
-            echo "<h1>HATA: İçerik dosyası ($view.php) bulunamadı!</h1>";
+            echo "<h1>Görünüm Dosyası Bulunamadı: $viewFile</h1>";
         }
         $content = ob_get_clean();
         
-        // 2. Layout Dosyasını Yükle (Senin attığın admin_layout.php)
         $layoutPath = $baseDir . $viewsFolder . '/layouts/admin_layout.php';
-        
-        if (file_exists($layoutPath)) {
-            include $layoutPath;
-        } else {
-            // Eğer layout bulunamazsa hatayı ve içeriği bas
-            echo "<div style='background:red; color:white; padding:10px; text-align:center;'>";
-            echo "Layout Dosyası Bulunamadı: $layoutPath <br>";
-            echo "Lütfen klasör adının (Views/views) doğru olduğundan emin olun.";
-            echo "</div>";
-            echo $content;
-        }
+        if (file_exists($layoutPath)) include $layoutPath; else echo $content;
     }
 }

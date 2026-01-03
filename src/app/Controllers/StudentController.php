@@ -77,9 +77,11 @@ class StudentController {
                 $groupId = !empty($_POST['group_id']) ? $_POST['group_id'] : null;
                 $standardSessions = !empty($_POST['standard_sessions']) ? $_POST['standard_sessions'] : 8;
                 $packageFee = !empty($_POST['package_fee']) ? $_POST['package_fee'] : 0;
-                $remainingSessions = $standardSessions;
                 
-                // 🔥 YENİ: NOTU AL
+                // 🔥 DÜZENLENEN KISIM: 
+                // İlk kayıtta ders bakiyesi 0 olur. Ödeme yapıldığında PaymentController üzerinden yüklenir.
+                $remainingSessions = 0; 
+                
                 $note = isset($_POST['note']) ? trim($_POST['note']) : null; 
                 
                 $parentName = trim($_POST['parent_name']); 
@@ -94,7 +96,6 @@ class StudentController {
                     if ($existingParent) {
                         $parentId = $existingParent['UserID'];
                     } else {
-                        // Dummy Email
                         $dummyEmail = $parentPhone . "@veli.sistem";
                         $stmtNewUser = $this->db->prepare("INSERT INTO Users (Email, FullName, PasswordHash, RoleID, Phone, ClubID, IsActive, CreatedAt) VALUES (?, ?, ?, 4, ?, ?, 1, GETDATE())");
                         $stmtNewUser->execute([$dummyEmail, $parentName, password_hash('123456', PASSWORD_DEFAULT), $parentPhone, $clubId]);
@@ -102,7 +103,6 @@ class StudentController {
                     }
                 }
 
-                // 🔥 YENİ: SQL'E 'Notes' EKLENDİ
                 $sql = "INSERT INTO Students 
                         (ClubID, GroupID, ParentID, FullName, BirthDate, ParentPhone, StandardSessions, PackageFee, RemainingSessions, Notes, IsActive, CreatedAt) 
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, GETDATE())";
@@ -110,11 +110,11 @@ class StudentController {
                 $this->db->prepare($sql)->execute([
                     $clubId, $groupId, $parentId, $fullName, $birthDate, $parentPhone, 
                     $standardSessions, $packageFee, $remainingSessions, 
-                    $note // <-- Not buraya eklendi
+                    $note
                 ]);
 
                 $this->db->commit();
-                $_SESSION['success_message'] = "Öğrenci başarıyla kaydedildi.";
+                $_SESSION['success_message'] = "Öğrenci başarıyla kaydedildi. Ders kredisi yüklemek için tahsilat yapınız.";
                 header("Location: index.php?page=students");
                 exit();
 
@@ -164,7 +164,7 @@ class StudentController {
         }
     }
 
-    // --- 🔥 ARŞİVLEME & İADE (DÜZELTİLEN KISIM) 🔥 ---
+    // --- ARŞİVLEME & İADE ---
     public function archive_store() {
         $role = strtolower($_SESSION['role'] ?? '');
         if ($role == 'coach' || $role == 'trainer') die("Yetkisiz işlem.");
@@ -177,27 +177,19 @@ class StudentController {
                 $studentId = $_POST['student_id'];
                 $actionType = $_POST['archive_type'];
                 $reason = $_POST['reason'] ?? '';
-                $refundAmount = $_POST['refund_amount'] ?? 0; // İade tutarı
+                $refundAmount = $_POST['refund_amount'] ?? 0;
 
-                // Not alanına arşiv sebebini ekle
                 $noteUpdate = " [Arşiv: " . $reason . " - " . date('d.m.Y') . "]";
                 $sqlArch = "UPDATE Students SET IsActive = 0, Notes = CONCAT(ISNULL(Notes, ''), ?) WHERE StudentID = ?";
                 $this->db->prepare($sqlArch)->execute([$noteUpdate, $studentId]);
                 
-                // İADE MANTIĞI
                 if ($actionType === 'refund') {
-                    // Hakkı sıfırla
                     $this->db->prepare("UPDATE Students SET RemainingSessions = 0 WHERE StudentID = ?")->execute([$studentId]);
-                    
-                    // 🔥 EĞER TUTAR GİRİLDİYSE KASADAN DÜŞ (NEGATİF KAYIT)
                     if ($refundAmount > 0) {
-                        // Payments tablosu varsa:
                         $sqlPay = "INSERT INTO Payments (ClubID, StudentID, Amount, PaymentDate, PaymentType, Method, Description, CreatedAt) 
                                    VALUES (?, ?, ?, GETDATE(), 'Refund', 'cash', ?, GETDATE())";
-                        // Tutar NEGATİF (-) olarak kaydedilir
                         $this->db->prepare($sqlPay)->execute([$clubId, $studentId, -$refundAmount, "İade: " . $reason]);
                     }
-
                     $_SESSION['success_message'] = "İlişik kesildi, bakiye sıfırlandı ve iade işlendi.";
                 } else {
                     $_SESSION['success_message'] = "Öğrenci donduruldu (Hakları saklı).";
@@ -236,7 +228,7 @@ class StudentController {
 
         $id = $_GET['id'] ?? null;
         if ($id) {
-            $this->db->prepare("DELETE FROM Students WHERE StudentID = ?")->execute([$id]);
+            $this->db->prepare("DELETE FROM Students WHERE StudentID = ?")->execute([id]);
             $_SESSION['success_message'] = "Silindi.";
         }
         header("Location: index.php?page=students_archived");

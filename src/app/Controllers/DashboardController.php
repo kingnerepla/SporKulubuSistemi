@@ -7,7 +7,7 @@ class DashboardController {
     private $db;
 
     public function __construct() {
-        // 🔥 1. SAAT DİLİMİ AYARI (Tüm Dashboard İçin) 🔥
+        // 1. SAAT DİLİMİ AYARI
         date_default_timezone_set('Europe/Istanbul');
 
         if (file_exists(__DIR__ . '/../Config/Database.php')) require_once __DIR__ . '/../Config/Database.php';
@@ -48,12 +48,45 @@ class DashboardController {
 
         // 5. VERİLERİ ÇEK
         try {
-            // --- VELİ ---
+            // --- VELİ (GÜNCELLENEN KISIM) ---
             if (($s_roleId === "4" || $s_role === "parent") && $userId) {
-                $sql = "SELECT s.*, g.GroupName FROM Students s LEFT JOIN Groups g ON s.GroupID = g.GroupID WHERE s.ParentID = ? AND s.IsActive = 1";
+                // a. Velinin öğrencilerini ve Grup/Koç ismini çek
+                $sql = "SELECT s.*, g.GroupName, 
+                        (SELECT FullName FROM Users WHERE UserID = g.CoachID) as CoachName
+                        FROM Students s 
+                        LEFT JOIN Groups g ON s.GroupID = g.GroupID 
+                        WHERE s.ParentID = ? AND s.IsActive = 1";
                 $stmt = $this->db->prepare($sql);
                 $stmt->execute([$userId]);
                 $parentStudents = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                
+                // b. Her öğrenci için detayları (Yoklama + Finans) doldur
+                foreach ($parentStudents as &$stu) {
+                    $sid = $stu['StudentID'];
+
+                    // 1. Son 5 Yoklama (SQL Server için TOP 5)
+                    $stmtAtt = $this->db->prepare("SELECT TOP 5 [Date], IsPresent FROM Attendance WHERE StudentID = ? ORDER BY [Date] DESC");
+                    $stmtAtt->execute([$sid]);
+                    $stu['attendance_log'] = $stmtAtt->fetchAll(PDO::FETCH_ASSOC);
+
+                    // 2. Devamlılık Oranı (Son 30 Gün)
+                    $startDate = date('Y-m-d', strtotime('-30 days'));
+                    $stmtStat = $this->db->prepare("
+                        SELECT COUNT(*) as Total, 
+                        SUM(CASE WHEN IsPresent=1 THEN 1 ELSE 0 END) as Present 
+                        FROM Attendance 
+                        WHERE StudentID = ? AND [Date] >= ?
+                    ");
+                    $stmtStat->execute([$sid, $startDate]);
+                    $stat = $stmtStat->fetch(PDO::FETCH_ASSOC);
+                    $stu['attendance_rate'] = ($stat['Total'] > 0) ? round(($stat['Present'] / $stat['Total']) * 100) : 0;
+
+                    // 3. Son Ödemeler
+                    $stmtPay = $this->db->prepare("SELECT TOP 5 Amount, PaymentDate FROM Payments WHERE StudentID = ? ORDER BY PaymentDate DESC");
+                    $stmtPay->execute([$sid]);
+                    $stu['payment_log'] = $stmtPay->fetchAll(PDO::FETCH_ASSOC);
+                }
+
                 $stats['totalStudents'] = count($parentStudents);
             } 
             
@@ -62,7 +95,6 @@ class DashboardController {
                 $stats['totalStudents'] = $this->getScalar("SELECT COUNT(s.StudentID) FROM Students s JOIN Groups g ON s.GroupID = g.GroupID WHERE g.CoachID = ? AND s.IsActive = 1", [$userId]);
                 $stats['totalGroups']   = $this->getScalar("SELECT COUNT(*) FROM Groups WHERE CoachID = ?", [$userId]);
                 
-                // Bugünün antrenmanları (Timezone ayarlandığı için doğru günü çeker)
                 $todayName = date('N'); // 1-7
                 $sql = "SELECT gs.*, g.GroupName, g.GroupID,
                         (SELECT COUNT(*) FROM Attendance a WHERE a.GroupID = g.GroupID AND a.Date = CAST(GETDATE() AS DATE)) as AttendanceCount 
@@ -70,9 +102,6 @@ class DashboardController {
                         JOIN Groups g ON gs.GroupID = g.GroupID 
                         WHERE g.CoachID = ? AND gs.DayOfWeek = ? 
                         ORDER BY gs.StartTime ASC";
-                
-                // Not: SQL Server için GETDATE() kullandık, MySQL ise CURDATE() olmalı.
-                // Eğer kod hata verirse AttendanceCount kısmını basitleştirebiliriz.
                 
                 $stmt = $this->db->prepare($sql);
                 $stmt->execute([$userId, $todayName]);
@@ -117,7 +146,7 @@ class DashboardController {
             'name' => $_SESSION['full_name'] ?? $_SESSION['name'] ?? 'Kullanıcı',
             'stats' => $stats,
             'todayTrainings' => $todayTrainings,
-            'students' => $parentStudents,
+            'students' => $parentStudents, // Dolu öğrenci dizisi
             'criticalClubs' => $criticalClubs, 
             'club' => $club, 
             'clubName' => $_SESSION['selected_club_name'] ?? $_SESSION['club_name'] ?? ''
@@ -163,7 +192,8 @@ class DashboardController {
         if (file_exists($path)) {
             include $path;
         } else {
-            include dirname(__DIR__) . '/Views/admin/dashboard.php';
+            // Varsayılan olarak admin dashboard'a düşmesin, hata basabiliriz veya boş sayfa
+            echo "View dosyası bulunamadı: $path";
         }
         $content = ob_get_clean();
         include dirname(__DIR__) . '/Views/layouts/admin_layout.php';

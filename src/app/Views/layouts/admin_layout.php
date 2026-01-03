@@ -135,6 +135,9 @@ $activePage = $_GET['page'] ?? 'dashboard';
                 <a href="index.php?page=parent_attendance" class="list-group-item list-group-item-action <?= ($activePage == 'parent_attendance') ? 'active' : '' ?>">
                     <i class="fa-solid fa-calendar-check me-2 text-success"></i> Yoklama Takibi
                 </a>
+                <a href="index.php?page=parent_payments" class="list-group-item list-group-item-action <?= ($activePage == 'parent_payments') ? 'active' : '' ?>">
+                    <i class="fa-solid fa-receipt me-2 text-warning"></i> Ödemelerim
+                </a>
             <?php endif; ?>
 
             <a href="index.php?page=logout" class="list-group-item list-group-item-action text-danger mt-5 border-top border-secondary">
