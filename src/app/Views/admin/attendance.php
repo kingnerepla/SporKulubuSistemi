@@ -1,205 +1,258 @@
 <div class="container-fluid py-4">
 
-    <div class="row justify-content-center mb-4">
-        <div class="col-md-6 text-center">
-            <div class="d-flex align-items-center justify-content-center bg-white p-2 rounded-pill shadow-sm border">
-                <a href="index.php?page=attendance&date=<?= date('Y-m-d', strtotime($selectedDate . ' -1 day')) ?>" class="btn btn-light rounded-circle shadow-sm">
-                    <i class="fa-solid fa-chevron-left"></i>
-                </a>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h3 class="fw-bold mb-1"><i class="fa-solid fa-clipboard-user text-info me-2"></i>Yoklama Al</h3>
+            <p class="text-muted small mb-0">
+                <?= $isAdmin ? 'Tarihler arası geçiş yapabilirsiniz.' : 'Bugünün yoklamasını alabilirsiniz.' ?>
+            </p>
+        </div>
+    </div>
 
-                <div class="mx-4 text-center position-relative">
-                    <div class="small text-muted fw-bold text-uppercase">YOKLAMA TARİHİ</div>
-                    <div class="h4 fw-bold mb-0 text-primary">
-                        <i class="fa-regular fa-calendar me-2"></i><?= date('d.m.Y', strtotime($selectedDate)) ?>
-                    </div>
-                    <input type="date" class="position-absolute top-0 start-0 w-100 h-100 opacity-0" value="<?= $selectedDate ?>" onchange="window.location.href='index.php?page=attendance&date='+this.value" style="cursor: pointer;">
+    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white">
+        <div class="card-body p-3">
+            <div class="d-flex justify-content-between align-items-center">
+                
+                <?php if($isAdmin): ?>
+                    <a href="index.php?page=attendance&date=<?= $prevDate ?>" 
+                       class="btn btn-light border rounded-circle shadow-sm d-flex align-items-center justify-content-center" 
+                       style="width: 45px; height: 45px;">
+                        <i class="fa-solid fa-chevron-left text-muted"></i>
+                    </a>
+                <?php else: ?>
+                     <span style="width: 45px;"></span> 
+                <?php endif; ?>
+
+                <div class="text-center">
+                    <h5 class="fw-bold mb-0 text-primary">
+                        <i class="fa-regular fa-calendar me-2 opacity-75"></i><?= $formattedDate ?>
+                    </h5>
                 </div>
 
-                <a href="index.php?page=attendance&date=<?= date('Y-m-d', strtotime($selectedDate . ' +1 day')) ?>" class="btn btn-light rounded-circle shadow-sm">
-                    <i class="fa-solid fa-chevron-right"></i>
-                </a>
-            </div>
-            
-            <div class="mt-2 badge bg-light text-secondary border fw-normal">
-                <?php 
-                    $gunler = ['Monday'=>'Pazartesi','Tuesday'=>'Salı','Wednesday'=>'Çarşamba','Thursday'=>'Perşembe','Friday'=>'Cuma','Saturday'=>'Cumartesi','Sunday'=>'Pazar'];
-                    echo 'Gün: ' . $gunler[date('l', strtotime($selectedDate))];
-                ?>
+                <?php if($isAdmin): ?>
+                    <a href="index.php?page=attendance&date=<?= $nextDate ?>" 
+                       class="btn btn-light border rounded-circle shadow-sm d-flex align-items-center justify-content-center"
+                       style="width: 45px; height: 45px;">
+                        <i class="fa-solid fa-chevron-right text-muted"></i>
+                    </a>
+                <?php else: ?>
+                    <span style="width: 45px;"></span>
+                <?php endif; ?>
+
             </div>
         </div>
     </div>
 
-    <h6 class="fw-bold text-secondary mb-3 ps-2 border-start border-4 border-primary">
-        <?= date('d.m.Y', strtotime($selectedDate)) == date('d.m.Y') ? 'BUGÜNKÜ' : 'SEÇİLİ GÜNDEKİ' ?> GRUPLAR
-    </h6>
-
-    <div class="row g-3 mb-5">
-        <?php foreach($groups as $grp): 
-            $isActive = (isset($_GET['group_id']) && $_GET['group_id'] == $grp['GroupID']);
+    <div class="accordion" id="attendanceAccordion">
+        <?php if(!empty($groups)): ?>
+            <?php foreach($groups as $index => $g): 
+                $collapseId = "collapse_" . $g['GroupID'];
+                $headingId = "heading_" . $g['GroupID'];
+                $hasStudents = !empty($g['students']);
+                $colors = ['primary', 'warning', 'info', 'success', 'danger'];
+                $color = $colors[$index % 5];
+            ?>
             
-            // Varsayılan Stil (Normal Açık)
-            $statusIcon = '<i class="fa-regular fa-clock"></i>';
-            $statusText = 'Bekliyor';
-            $cardStyle = 'bg-white border-0';
-            $timeHtml = '';
-            $isClickable = true;
-
-            // A. Saat Bilgisi Hazırla
-            if (!empty($grp['today_times'])) {
-                foreach($grp['today_times'] as $t) {
-                    $timeHtml .= '<div class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 mb-1 me-1"><i class="fa-regular fa-clock me-1"></i>' . $t . '</div> ';
-                }
-            } else {
-                $timeHtml = '<span class="small text-muted fst-italic">Planlanmış saat yok</span>';
-            }
-
-            // B. Kart Durumunu Belirle
-            
-            // 1. Durum: Yoklama zaten alınmış
-            if ($grp['is_taken']) {
-                $cardStyle = 'bg-success bg-opacity-10 border border-success';
-                $statusIcon = '<i class="fa-solid fa-circle-check text-success"></i>';
-                $statusText = 'Tamamlandı';
-            }
-            // 2. Durum: Erişim Yetkisi Yok (Antrenörün grubu değil)
-            elseif (!$grp['can_access']) {
-                $cardStyle = 'bg-light border border-dashed opacity-50'; // Silik
-                $statusIcon = '<i class="fa-solid fa-lock text-muted"></i>';
-                $statusText = 'Yetkiniz Yok';
-                $isClickable = false;
-            }
-            // 3. Durum: Bugün Ders Yok (Ama Yönetici Görüyor)
-            elseif (!$grp['is_lesson_day']) {
-                // Sadece yönetici buraya düşer (Antrenör için yukarısı geçerli olurdu)
-                $cardStyle = 'bg-warning bg-opacity-10 border border-warning';
-                $statusIcon = '<i class="fa-solid fa-calendar-plus text-warning"></i>';
-                $statusText = 'Ekstra / Telafi';
-                $timeHtml = '<div class="badge bg-warning text-dark border border-warning border-opacity-25">Saat Belirsiz</div>';
-            }
-
-            if($isActive) $cardStyle .= ' ring-2';
-        ?>
-        
-        <div class="col-6 col-md-4 col-lg-3">
-            <?php if($isClickable): ?>
-                <a href="index.php?page=attendance&date=<?= $selectedDate ?>&group_id=<?= $grp['GroupID'] ?>" class="text-decoration-none">
-            <?php else: ?>
-                <div style="cursor: not-allowed;">
-            <?php endif; ?>
-
-                <div class="card h-100 shadow-sm <?= $cardStyle ?> hover-scale transition-all">
-                    <div class="card-body text-center p-3">
-                        <div class="mb-2 fs-4 text-primary">
-                            <i class="fa-solid fa-people-group"></i>
-                        </div>
-                        <h6 class="fw-bold text-dark mb-2 text-truncate"><?= htmlspecialchars($grp['GroupName']) ?></h6>
+            <div class="card border-0 shadow-sm rounded-4 mb-3 overflow-hidden group-card">
+                
+                <div class="card-header bg-white p-0 border-0 border-start border-5 border-<?= $color ?>" id="<?= $headingId ?>">
+                    <button class="d-flex align-items-center justify-content-between w-100 p-4 btn btn-link text-decoration-none text-dark" 
+                            type="button" 
+                            data-bs-toggle="collapse" 
+                            data-bs-target="#<?= $collapseId ?>">
                         
-                        <div class="mb-3">
-                            <?= $timeHtml ?>
+                        <div class="d-flex align-items-center text-start">
+                            <div class="fw-bold fs-5"><?= htmlspecialchars($g['GroupName']) ?></div>
+                            <?php if(!empty($g['lesson_hours'])): ?>
+                                <span class="badge bg-white text-muted border ms-3 fw-normal">
+                                    <i class="fa-regular fa-clock me-1"></i><?= $g['lesson_hours'] ?>
+                                </span>
+                            <?php endif; ?>
                         </div>
 
-                        <div class="d-flex justify-content-center align-items-center small mt-auto">
-                            <span class="me-2"><?= $statusIcon ?></span>
-                            <span class="fw-bold text-secondary" style="font-size: 0.8rem;">
-                                <?= $statusText ?>
-                            </span>
-                        </div>
-                    </div>
+                        <i class="fa-solid fa-chevron-down text-muted transition-icon"></i>
+                    </button>
                 </div>
 
-            <?php if($isClickable): ?></a><?php else: ?></div><?php endif; ?>
-        </div>
-        <?php endforeach; ?>
-    </div>
+                <div id="<?= $collapseId ?>" class="accordion-collapse collapse" data-bs-parent="#attendanceAccordion">
+                    <div class="card-body bg-white border-top p-0">
+                        
+                        <?php if(!$g['is_lesson_day'] && !$isAdmin): ?>
+                            <div class="text-center py-5 text-muted">
+                                <i class="fa-solid fa-calendar-xmark fa-2x mb-2 opacity-25"></i>
+                                <div>Bugün ders yok.</div>
+                            </div>
+                        <?php elseif(!$hasStudents): ?>
+                            <div class="text-center py-5 text-muted">
+                                <i class="fa-solid fa-user-slash fa-2x mb-2 opacity-25"></i>
+                                <div>Öğrenci yok.</div>
+                            </div>
+                        <?php else: ?>
 
-    <?php if(isset($_GET['group_id']) && !empty($_GET['group_id'])): 
-        $groupId = $_GET['group_id'];
-        
-        // Veritabanı bağlantısı ve öğrenci listesi çekimi
-        $db = (new Database())->getConnection();
-        $sql = "SELECT s.StudentID, s.FullName, s.RemainingSessions, 
-                       (SELECT IsPresent FROM Attendance WHERE StudentID = s.StudentID AND [Date] = ? AND GroupID = ?) as TodayStatus
-                FROM Students s 
-                WHERE s.GroupID = ? AND s.IsActive = 1 
-                ORDER BY s.FullName ASC";
-        
-        $stmt = $db->prepare($sql);
-        $stmt->execute([$selectedDate, $groupId, $groupId]);
-        $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                            <form action="index.php?page=attendance_store" method="POST">
+                                <input type="hidden" name="group_id" value="<?= $g['GroupID'] ?>">
+                                <input type="hidden" name="date" value="<?= $selectedDate ?>">
+                                
+                                <div class="list-group list-group-flush">
+                                    <?php foreach($g['students'] as $s): 
+                                        $isPresent = isset($g['attendance'][$s['StudentID']]) && $g['attendance'][$s['StudentID']] == 1;
+                                        $rem = $s['RemainingSessions'] ?? 0;
+                                        
+                                        $remClass = 'bg-light text-dark border'; 
+                                        if($rem > 5) $remClass = 'bg-success bg-opacity-10 text-success border-success border-opacity-25';
+                                        elseif($rem > 0) $remClass = 'bg-warning bg-opacity-10 text-dark border-warning border-opacity-25';
+                                        else $remClass = 'bg-danger bg-opacity-10 text-danger border-danger border-opacity-25';
+                                    ?>
+                                    
+                                    <div class="list-group-item p-3 d-flex align-items-center justify-content-between bg-white student-row">
+                                        
+                                        <div style="width: 40%;" class="d-flex align-items-center">
+                                            <span class="fw-bold text-dark fs-6 text-truncate"><?= htmlspecialchars($s['FullName']) ?></span>
+                                        </div>
 
-        $selectedGroupName = "Grup";
-        foreach($groups as $g) { if($g['GroupID'] == $groupId) $selectedGroupName = $g['GroupName']; }
-    ?>
+                                        <div style="width: 20%;" class="d-flex justify-content-center">
+                                            <div class="rounded-pill py-1 px-3 fw-bold small text-nowrap <?= $remClass ?>">
+                                                <?= $rem ?> Hak
+                                            </div>
+                                        </div>
 
-    <div class="card border-0 shadow rounded-4 mb-5" id="studentListSection">
-        <div class="card-header bg-primary text-white py-3 d-flex justify-content-between align-items-center rounded-top-4">
-             <h6 class="mb-0 fw-bold"><i class="fa-solid fa-list-check me-2"></i><?= htmlspecialchars($selectedGroupName) ?></h6>
-             <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="selectAll"><label class="form-check-label text-white small" for="selectAll">Tümü</label></div>
-        </div>
+                                        <div style="width: 40%;" class="d-flex justify-content-end">
+                                            <input type="checkbox" 
+                                                   name="status[<?= $s['StudentID'] ?>]" 
+                                                   id="chk_<?= $s['StudentID'] ?>_<?= $g['GroupID'] ?>" 
+                                                   class="attendance-checkbox" 
+                                                   <?= $isPresent ? 'checked' : '' ?>>
+                                            
+                                            <label for="chk_<?= $s['StudentID'] ?>_<?= $g['GroupID'] ?>" class="attendance-label">
+                                                <div class="icon-circle shadow-sm">
+                                                    <i class="fa-solid fa-check icon-check"></i>
+                                                    <i class="fa-solid fa-xmark icon-xmark"></i>
+                                                </div>
+                                            </label>
+                                        </div>
 
-        <form action="index.php?page=attendance_save" method="POST">
-            <input type="hidden" name="group_id" value="<?= $groupId ?>">
-            <input type="hidden" name="date" value="<?= $selectedDate ?>">
-            
-            <div class="table-responsive">
-                <table class="table align-middle mb-0 table-hover">
-                    <thead class="bg-light text-muted small">
-                        <tr>
-                            <th class="ps-4">Öğrenci Adı</th>
-                            <th class="text-center">Kalan</th>
-                            <th class="text-center">Durum</th>
-                            <th class="text-end pe-4">Katılım</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach($students as $s): 
-                            $rem = $s['RemainingSessions']; 
-                            $isChecked = ($s['TodayStatus'] == 1) ? 'checked' : ''; 
-                            $rowClass = $rem <= 0 ? 'bg-danger bg-opacity-10' : '';
-                            $badgeColor = $rem <= 0 ? 'bg-danger' : ($rem <= 2 ? 'bg-warning text-dark' : 'bg-success');
-                        ?>
-                        <tr class="<?= $rowClass ?>">
-                            <td class="ps-4 fw-bold"><?= htmlspecialchars($s['FullName']) ?></td>
-                            
-                            <td class="text-center">
-                                <span class="badge <?= $badgeColor ?> rounded-pill"><?= $rem ?></span>
-                            </td>
-                            
-                            <td class="text-center small">
-                                <?= $isChecked ? '<span class="text-success fw-bold">Geldi</span>' : '<span class="opacity-50">-</span>' ?>
-                            </td>
-                            
-                            <td class="text-end pe-4">
-                                <div class="form-check form-switch d-inline-block">
-                                    <input type="hidden" name="status[<?= $s['StudentID'] ?>]" value="0">
-                                    <input class="form-check-input attendance-checkbox shadow-sm" type="checkbox" name="status[<?= $s['StudentID'] ?>]" value="1" style="width:3em;height:1.5em;cursor:pointer;" <?= $isChecked ?>>
+                                    </div>
+                                    <?php endforeach; ?>
                                 </div>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
 
-            <div class="card-footer bg-white py-3 text-end rounded-bottom-4">
-                <button type="submit" class="btn btn-success px-5 fw-bold shadow">Kaydet</button>
+                                <div class="p-3 bg-white text-end border-top">
+                                    <button type="submit" class="btn btn-primary px-5 fw-bold rounded-pill shadow-sm">
+                                        KAYDET
+                                    </button>
+                                </div>
+                            </form>
+                        <?php endif; ?>
+                    </div>
+                </div>
             </div>
-        </form>
+            <?php endforeach; ?>
+        <?php else: ?>
+            <div class="text-center text-muted py-5">Grup bulunamadı.</div>
+        <?php endif; ?>
     </div>
-
-    <script>
-        document.getElementById('studentListSection').scrollIntoView({ behavior: 'smooth' });
-        document.getElementById('selectAll')?.addEventListener('change', function() {
-            const checkboxes = document.querySelectorAll('.attendance-checkbox');
-            checkboxes.forEach(cb => cb.checked = this.checked);
-        });
-    </script>
-    <?php endif; ?>
-
 </div>
 
 <style>
-    .hover-scale:hover { transform: translateY(-3px); }
-    .transition-all { transition: all 0.3s ease; }
-    .ring-2 { box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.25) !important; }
+    /* GİZLİ CHECKBOX */
+    .attendance-checkbox { display: none; }
+
+    /* SATIR ÇİZGİSİ */
+    .student-row {
+        border-bottom: 1px solid #dee2e6; /* Belirgin Gri */
+    }
+    .student-row:last-child {
+        border-bottom: none;
+    }
+
+    /* BUTON ALANI */
+    .attendance-label {
+        cursor: pointer;
+        display: inline-block;
+        transition: transform 0.1s;
+    }
+    .attendance-label:active { transform: scale(0.95); }
+
+    /* YUVARLAK İKON ÇERÇEVESİ */
+    .icon-circle {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        display: flex;         
+        align-items: center;   
+        justify-content: center; 
+        font-size: 1.3rem;     
+        color: white; 
+        transition: all 0.3s ease;
+        padding: 0;
+        margin: 0;
+        line-height: 1; /* Satır yüksekliği sorunu çözer */
+    }
+
+    /* İKONLARIN İNCE AYARI */
+    .icon-circle i {
+        display: block; /* Inline davranışı kır */
+        text-align: center;
+        width: 100%;
+    }
+
+    /* X İkonunu zorla ortala (Hafif sağa iterek) */
+    .icon-xmark {
+        transform: translateX(1px); /* X ikonunu 1 pixel sağa it */
+    }
+
+    /* KIRMIZI DURUM */
+    .attendance-checkbox:not(:checked) + .attendance-label .icon-circle {
+        background-color: #dc3545;
+        border: 2px solid #dc3545;
+    }
+    .attendance-checkbox:not(:checked) + .attendance-label .icon-check { display: none; }
+    .attendance-checkbox:not(:checked) + .attendance-label .icon-xmark { display: block; }
+
+    /* YEŞİL DURUM */
+    .attendance-checkbox:checked + .attendance-label .icon-circle {
+        background-color: #198754;
+        border: 2px solid #198754;
+    }
+    .attendance-checkbox:checked + .attendance-label .icon-xmark { display: none; }
+    .attendance-checkbox:checked + .attendance-label .icon-check { display: block; }
+
+    /* ORTAK STİLLER */
+    .text-truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .accordion-button:not(.collapsed) .transition-icon { transform: rotate(-180deg); }
+    .transition-icon { transition: transform 0.3s ease; }
+    .group-card:hover { transform: translateY(-2px); transition: transform 0.2s; }
 </style>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // Controller'dan gelen açık grup ID'sini al
+        const openGroupId = "<?= $openGroupId ?? '' ?>"; 
+        
+        if (openGroupId) {
+            // ID yapısı: collapseGroup_10 (Örnek)
+            // Eğer View dosyasında collapse ID'lerini nasıl verdiysen ona göre ayarla.
+            // Genelde döngüde şöyle veriyoruz: id="collapseGroup_<?= $g['GroupID'] ?>"
+            
+            // Eğer view dosyasında ID'ler "collapseGroup_GroupID" şeklindeyse:
+            const targetId = 'collapseGroup_' + openGroupId;
+            
+            // Eğer view dosyasında ID'ler sadece sırayla "collapseGroup1, collapseGroup2" gidiyorsa,
+            // bunu JavaScript ile bulmak zor olabilir. 
+            // EN SAĞLIKLISI View dosyasındaki ID'leri GroupID ile eşleştirmektir.
+            
+            const collapseElement = document.getElementById(targetId);
+            
+            if (collapseElement) {
+                // Bootstrap 5 ile aç
+                if (typeof bootstrap !== 'undefined') {
+                    new bootstrap.Collapse(collapseElement, { show: true });
+                } else {
+                    // Bootstrap yüklü değilse manuel class ekle (Fallback)
+                    collapseElement.classList.add('show');
+                }
+                
+                // Oraya kaydır
+                collapseElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+    });
+</script>

@@ -1,197 +1,206 @@
 <?php
+// Hataları görelim
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
 class AttendanceController {
     private $db;
 
     public function __construct() {
+        // 🔥 1. SAAT DİLİMİ AYARI (Tarih kaymasını engeller)
+        date_default_timezone_set('Europe/Istanbul');
+
         if (file_exists(__DIR__ . '/../Config/Database.php')) require_once __DIR__ . '/../Config/Database.php';
         $this->db = (new Database())->getConnection();
 
-        // GÜVENLİK KONTROLÜ
+        // Yetki Kontrolü
         $role = strtolower($_SESSION['role'] ?? '');
         $allowedRoles = ['clubadmin', 'admin', 'systemadmin', 'superadmin', 'coach', 'trainer'];
-        
         if (!in_array($role, $allowedRoles)) {
-            die('<div class="alert alert-danger m-5">Bu sayfaya erişim yetkiniz yok.</div>');
+            header("Location: index.php?page=dashboard");
+            exit;
         }
     }
 
+    // --- LİSTELEME SAYFASI ---
     public function index() {
         $clubId = $_SESSION['selected_club_id'] ?? $_SESSION['club_id'];
         $role = strtolower($_SESSION['role'] ?? '');
         $userId = $_SESSION['user_id'] ?? 0;
-        
-        // Tarih Seçimi (Varsayılan: Bugün)
-        $date = $_GET['date'] ?? date('Y-m-d');
-        // Bugün haftanın kaçıncı günü? (1: Pzt ... 7: Paz)
-        $dayOfWeek = date('N', strtotime($date));
+        $isAdmin = in_array($role, ['clubadmin', 'admin', 'systemadmin', 'superadmin']);
 
-        // 1. KULÜBÜN TÜM GRUPLARINI ÇEK
-        $stmt = $this->db->prepare("SELECT * FROM Groups WHERE ClubID = ? ORDER BY GroupName ASC");
-        $stmt->execute([$clubId]);
-        $groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        // 2. HER GRUBU İŞLE (SAAT VE YETKİ KONTROLÜ)
-        foreach ($groups as &$g) {
-            
-            // A. BUGÜN BU GRUBUN DERSİ VAR MI? (Yeni Tablodan Bakıyoruz)
-            $schStmt = $this->db->prepare("SELECT StartTime, EndTime FROM GroupSchedule WHERE GroupID = ? AND DayOfWeek = ? ORDER BY StartTime");
-            $schStmt->execute([$g['GroupID'], $dayOfWeek]);
-            $schedules = $schStmt->fetchAll(PDO::FETCH_ASSOC);
-            
-            $g['today_times'] = [];
-            $g['is_lesson_day'] = false;
-
-            if ($schedules) {
-                $g['is_lesson_day'] = true;
-                foreach($schedules as $sch) {
-                    // Saati temizle (17:00:00 -> 17:00)
-                    $start = substr($sch['StartTime'], 0, 5);
-                    $end = substr($sch['EndTime'], 0, 5);
-                    $g['today_times'][] = "$start - $end";
-                }
-            }
-
-            // B. DAHA ÖNCE YOKLAMA ALINMIŞ MI?
-            $check = $this->db->prepare("SELECT COUNT(*) FROM Attendance WHERE GroupID = ? AND [Date] = ?");
-            $check->execute([$g['GroupID'], $date]);
-            $g['is_taken'] = ($check->fetchColumn() > 0);
-            $g['student_count'] = $check->fetchColumn(); // (Opsiyonel sayaç)
-
-            // C. ERİŞİM YETKİSİ (KİLİT)
-            // Varsayılan: Kapalı
-            $g['can_access'] = false;
-
-            // Kural 1: Yöneticiyse her zaman girebilir.
-            if (in_array($role, ['clubadmin', 'admin', 'systemadmin', 'superadmin'])) {
-                $g['can_access'] = true;
-            } 
-            // Kural 2: Antrenörse...
-            elseif ($role == 'coach' || $role == 'trainer') {
-                // Sadece kendi atandığı grup mu?
-                if ($g['CoachID'] == $userId) {
-                    // Kendi grubuysa, ders günü olmasa bile girebilsin mi? 
-                    // Genelde "Sadece ders günü girsin" istenir ama esneklik için "Kendi grubuysa girsin" diyelim.
-                    // Eğer sadece ders günü girsin istersen: if ($g['is_lesson_day']) ekle.
-                    $g['can_access'] = true; 
-                }
-            }
+        // Tarih Belirleme (Saat dilimi ayarlandığı için artık doğru çalışır)
+        if ($isAdmin) {
+            $date = $_GET['date'] ?? date('Y-m-d');
+        } else {
+            $date = date('Y-m-d');
         }
 
+        // Navigasyon
+        $prevDate = date('Y-m-d', strtotime($date . ' -1 day'));
+        $nextDate = date('Y-m-d', strtotime($date . ' +1 day'));
+
+        // Tarih Başlığı
+        $timestamp = strtotime($date);
+        $days = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+        $months = ['', 'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+        $formattedDate = date('d', $timestamp) . ' ' . $months[date('n', $timestamp)] . ' ' . date('Y', $timestamp) . ' ' . $days[date('w', $timestamp)];
+        $dayOfWeek = date('N', $timestamp);
+
+        // 1. Grupları Getir
+        $sqlGroups = "SELECT GroupID, GroupName FROM Groups WHERE ClubID = ?";
+        $paramsGroups = [$clubId];
+
+        if (!$isAdmin) {
+            $sqlGroups .= " AND CoachID = ?";
+            $paramsGroups[] = $userId;
+        }
+        $sqlGroups .= " ORDER BY GroupName ASC";
+
+        $stmt = $this->db->prepare($sqlGroups);
+        $stmt->execute($paramsGroups);
+        $rawGroups = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $filteredGroups = []; // Filtrelenmiş grupları burada toplayacağız
+
+        // 2. Grupların Detaylarını Doldur ve FİLTRELE
+        foreach ($rawGroups as $g) {
+            $gId = $g['GroupID'];
+
+            // Ders Günü mü?
+            $stmtSch = $this->db->prepare("SELECT StartTime, EndTime FROM GroupSchedule WHERE GroupID = ? AND DayOfWeek = ?");
+            $stmtSch->execute([$gId, $dayOfWeek]);
+            $schedules = $stmtSch->fetchAll(PDO::FETCH_ASSOC);
+
+            $isLessonDay = !empty($schedules);
+
+            // 🔥 2. FİLTRELEME MANTIĞI 🔥
+            // Eğer Yönetici DEĞİLSE ve Bugün Ders YOKSA -> Bu grubu listeye ekleme, pas geç.
+            if (!$isAdmin && !$isLessonDay) {
+                continue; 
+            }
+
+            // Grup verilerini işle
+            $g['is_lesson_day'] = $isLessonDay;
+            $g['lesson_hours'] = '';
+            
+            if ($isLessonDay) {
+                $times = [];
+                foreach($schedules as $s) {
+                    $times[] = substr($s['StartTime'],0,5) . "-" . substr($s['EndTime'],0,5);
+                }
+                $g['lesson_hours'] = implode(', ', $times);
+            }
+
+            // Yönetici her zaman işlem yapabilsin diye true yapıyoruz (Ama yukarıda continue ile atılmadıysa)
+            if ($isAdmin) $g['is_lesson_day'] = true;
+
+            // Öğrencileri Çek
+            $stmtStu = $this->db->prepare("SELECT StudentID, FullName, RemainingSessions FROM Students WHERE GroupID = ? AND IsActive = 1 ORDER BY FullName ASC");
+            $stmtStu->execute([$gId]);
+            $g['students'] = $stmtStu->fetchAll(PDO::FETCH_ASSOC);
+
+            // Mevcut Yoklamayı Çek
+            $stmtAtt = $this->db->prepare("SELECT StudentID, IsPresent FROM Attendance WHERE GroupID = ? AND [Date] = ?");
+            $stmtAtt->execute([$gId, $date]);
+            $g['attendance'] = $stmtAtt->fetchAll(PDO::FETCH_KEY_PAIR);
+            
+            // İstatistik
+            $g['present_count'] = 0;
+            foreach($g['attendance'] as $status) {
+                if($status == 1) $g['present_count']++;
+            }
+
+            // Grubu filtrelenmiş listeye ekle
+            $filteredGroups[] = $g;
+        }
+
+        // View'a filtrelenmiş listeyi ($filteredGroups) gönderiyoruz
         $this->render('attendance', [
-            'groups' => $groups,
+            'groups' => $filteredGroups,
             'selectedDate' => $date,
-            'userRole' => $role
+            'formattedDate' => $formattedDate, 
+            'prevDate' => $prevDate,           
+            'nextDate' => $nextDate,           
+            'isAdmin' => $isAdmin,
+            'openGroupId' => $_GET['open_group'] ?? null 
         ]);
     }
 
-    // --- YOKLAMAYI KAYDET ---
-    public function save() {
+    // --- KAYDETME İŞLEMİ ---
+    public function store() {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $this->db->beginTransaction();
+                $clubId = $_SESSION['selected_club_id'] ?? $_SESSION['club_id'];
+                $role = strtolower($_SESSION['role'] ?? '');
+                $userId = $_SESSION['user_id'] ?? 0;
+                $isAdmin = in_array($role, ['clubadmin', 'admin', 'systemadmin', 'superadmin']);
 
                 $groupId = $_POST['group_id'];
-                $date = $_POST['date']; 
-                $statuses = $_POST['status'] ?? []; 
+                
+                // Tarihi alırken saat dilimi hatası olmasın
+                date_default_timezone_set('Europe/Istanbul');
+                $date = $isAdmin ? $_POST['date'] : date('Y-m-d');
 
-                foreach ($statuses as $studentId => $status) {
-                    $status = (int)$status; 
+                if (!$isAdmin) {
+                    $check = $this->db->prepare("SELECT COUNT(*) FROM Groups WHERE GroupID = ? AND CoachID = ?");
+                    $check->execute([$groupId, $userId]);
+                    if ($check->fetchColumn() == 0) {
+                        die('<div class="alert alert-danger">Yetkisiz işlem.</div>');
+                    }
+                }
 
-                    // Mevcut durumu kontrol et
-                    $checkStmt = $this->db->prepare("SELECT AttendanceID, IsPresent FROM Attendance WHERE StudentID = ? AND [Date] = ?");
-                    $checkStmt->execute([$studentId, $date]);
+                $postedStatus = $_POST['status'] ?? []; 
+                
+                $allStudentsStmt = $this->db->prepare("SELECT StudentID FROM Students WHERE GroupID = ? AND IsActive = 1");
+                $allStudentsStmt->execute([$groupId]);
+                $allStudents = $allStudentsStmt->fetchAll(PDO::FETCH_COLUMN);
+
+                foreach ($allStudents as $studentId) {
+                    $newStatus = isset($postedStatus[$studentId]) ? 1 : 0;
+                    
+                    $checkStmt = $this->db->prepare("SELECT AttendanceID, IsPresent FROM Attendance WHERE StudentID = ? AND GroupID = ? AND [Date] = ?");
+                    $checkStmt->execute([$studentId, $groupId, $date]);
                     $existing = $checkStmt->fetch(PDO::FETCH_ASSOC);
 
                     if ($existing) {
-                        // Güncelleme (Hata düzeltme senaryosu)
                         $oldStatus = (int)$existing['IsPresent'];
-                        
-                        // Gelmedi -> Geldi olduysa (1 düş)
-                        if ($oldStatus == 0 && $status == 1) $this->modifySessions($studentId, -1);
-                        // Geldi -> Gelmedi olduysa (1 iade et)
-                        elseif ($oldStatus == 1 && $status == 0) $this->modifySessions($studentId, +1);
-
-                        $this->db->prepare("UPDATE Attendance SET IsPresent = ? WHERE AttendanceID = ?")->execute([$status, $existing['AttendanceID']]);
-
+                        if ($oldStatus != $newStatus) {
+                            if ($oldStatus == 0 && $newStatus == 1) $this->modifySessions($studentId, -1);
+                            elseif ($oldStatus == 1 && $newStatus == 0) $this->modifySessions($studentId, +1);
+                            
+                            $this->db->prepare("UPDATE Attendance SET IsPresent = ? WHERE AttendanceID = ?")->execute([$newStatus, $existing['AttendanceID']]);
+                        }
                     } else {
-                        // Yeni Kayıt
-                        $this->db->prepare("INSERT INTO Attendance (StudentID, GroupID, [Date], IsPresent, CreatedAt) VALUES (?, ?, ?, ?, GETDATE())")->execute([$studentId, $groupId, $date, $status]);
-                        // Geldi ise düş
-                        if ($status == 1) $this->modifySessions($studentId, -1);
+                        $this->db->prepare("INSERT INTO Attendance (ClubID, GroupID, StudentID, [Date], IsPresent, CreatedAt) VALUES (?, ?, ?, ?, ?, GETDATE())")
+                                 ->execute([$clubId, $groupId, $studentId, $date, $newStatus]);
+                        if ($newStatus == 1) $this->modifySessions($studentId, -1);
                     }
                 }
 
                 $this->db->commit();
-                $_SESSION['success_message'] = "Yoklama başarıyla kaydedildi.";
-                header("Location: index.php?page=attendance&group_id=$groupId&date=$date");
+                $_SESSION['success_message'] = "Yoklama kaydedildi.";
+                
+                header("Location: index.php?page=attendance&date=$date&open_group=$groupId");
                 exit;
 
             } catch (Exception $e) {
                 if ($this->db->inTransaction()) $this->db->rollBack();
-                die("Hata: " . $e->getMessage());
+                $_SESSION['error_message'] = "Hata: " . $e->getMessage();
+                header("Location: index.php?page=attendance&date=$date");
+                exit;
             }
         }
     }
 
-    // Yardımcı: Kontör Düş/Ekle
     private function modifySessions($studentId, $amount) {
-        $sql = "UPDATE Students SET RemainingSessions = RemainingSessions + ? WHERE StudentID = ?";
-        $this->db->prepare($sql)->execute([$amount, $studentId]);
+        try {
+            $sql = "UPDATE Students SET RemainingSessions = RemainingSessions + ? WHERE StudentID = ?";
+            $this->db->prepare($sql)->execute([$amount, $studentId]);
+        } catch (Exception $e) {}
     }
-    public function sendMail() {
-        $clubId = $_SESSION['selected_club_id'] ?? $_SESSION['club_id'];
-        $groupId = $_GET['group_id'];
-        $month = $_GET['month'];
-        $year = $_GET['year'];
-        $toEmail = $_GET['email'] ?? $_SESSION['email']; // Varsayılan: Giriş yapanın maili
-    
-        // 1. Grup Adını Al
-        $stmt = $this->db->prepare("SELECT GroupName FROM Groups WHERE GroupID = ?");
-        $stmt->execute([$groupId]);
-        $groupName = $stmt->fetchColumn();
-    
-        // 2. Basit HTML İçerik Oluştur (Özet Rapor)
-        $subject = "Yoklama Raporu: $groupName ($month/$year)";
-        
-        $message = "<html><body>";
-        $message .= "<h2>$groupName - Aylık Yoklama Özeti</h2>";
-        $message .= "<p><b>Dönem:</b> $month / $year</p>";
-        $message .= "<table border='1' cellpadding='5' style='border-collapse: collapse;'>";
-        $message .= "<tr><th>Öğrenci</th><th>Toplam Katılım</th></tr>";
-    
-        // Öğrenci verilerini çek
-        $stuSql = "SELECT StudentID, FullName FROM Students WHERE GroupID = ? AND IsActive = 1";
-        $stmtStu = $this->db->prepare($stuSql);
-        $stmtStu->execute([$groupId]);
-        $students = $stmtStu->fetchAll(PDO::FETCH_ASSOC);
-    
-        foreach($students as $s) {
-            $attSql = "SELECT COUNT(*) FROM Attendance WHERE StudentID = ? AND GroupID = ? AND MONTH([Date]) = ? AND YEAR([Date]) = ? AND IsPresent = 1";
-            $stmtAtt = $this->db->prepare($attSql);
-            $stmtAtt->execute([$s['StudentID'], $groupId, $month, $year]);
-            $count = $stmtAtt->fetchColumn();
-            
-            $message .= "<tr><td>{$s['FullName']}</td><td align='center'>$count Ders</td></tr>";
-        }
-        
-        $message .= "</table><br><p>Bu rapor Spor CRM sistemi tarafından otomatik oluşturulmuştur.</p>";
-        $message .= "</body></html>";
-    
-        // 3. Mail Başlıkları
-        $headers = "MIME-Version: 1.0" . "\r\n";
-        $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
-        $headers .= "From: noreply@sporcrm.com" . "\r\n";
-    
-        // 4. Gönder
-        if(mail($toEmail, $subject, $message, $headers)) {
-            $_SESSION['success_message'] = "Rapor özeti $toEmail adresine başarıyla gönderildi.";
-        } else {
-            $_SESSION['error_message'] = "Mail gönderimi sırasında bir hata oluştu.";
-        }
-    
-        header("Location: index.php?page=attendance_report&group_id=$groupId&month=$month&year=$year");
-        exit;
-    }
+
     private function render($view, $data = []) {
         if(isset($_SESSION)) $data = array_merge($_SESSION, $data);
         extract($data);

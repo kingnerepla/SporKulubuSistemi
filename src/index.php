@@ -81,22 +81,19 @@ switch ($page) {
     case 'delete_expense':   safe_load('SystemFinanceController', 'deleteExpense'); break;
 
     // --- ÖĞRENCİ İŞLEMLERİ ---
-    case 'students':         safe_load('StudentController', 'index'); break;
-    case 'student_add':      safe_load('StudentController', 'create'); break;
-    case 'student_edit':     safe_load('StudentController', 'edit'); break;
-    case 'student_update':   safe_load('StudentController', 'update'); break;
-    case 'student_store':    safe_load('StudentController', 'store'); break;
-    case 'student_delete':   safe_load('StudentController', 'delete'); break; // Arşive atar (Soft Delete)
-    case 'students_archived': safe_load('StudentController', 'archived'); break;
-    case 'student_restore':  safe_load('StudentController', 'restore'); break;
-    case 'student_destroy':  safe_load('StudentController', 'destroy'); break; // [YENİ EKLENDİ] Tamamen siler
-
-    // --- GRUPLAR VE TAKVİM ---
-    // ... diğer case'ler ...
+    case 'students':              safe_load('StudentController', 'index'); break;
+    case 'student_store':         safe_load('StudentController', 'store'); break;
+    case 'student_update':        safe_load('StudentController', 'update'); break;
+    case 'student_archive_store': safe_load('StudentController', 'archive_store'); break;
+    case 'students_archived':     safe_load('StudentController', 'archived'); break;
+    case 'student_restore':       safe_load('StudentController', 'restore'); break;  // <-- BU SATIR EKSİKTİ (Geri Yükleme)
+    case 'student_destroy':       safe_load('StudentController', 'destroy'); break;  // <-- BU SATIR EKSİKTİ (Tam Silme)
+    case 'student_update_note':   safe_load('StudentController', 'update_note'); break;
+    case 'student_update_password': safe_load('StudentController', 'update_password'); break; // <-- YENİ ROTA
 
     // --- GRUP YÖNETİMİ ROTALARI ---
-    case 'groups':       safe_load('GroupController', 'index'); break;
-    case 'group_store':  safe_load('GroupController', 'store'); break;
+    case 'groups':      safe_load('GroupController', 'index'); break;
+    case 'group_save':  safe_load('GroupController', 'save'); break;   // Hem ekle hem düzenle
     case 'group_delete': safe_load('GroupController', 'delete'); break;
 
     // ... diğer case'ler ...
@@ -109,11 +106,11 @@ switch ($page) {
     // index.php dosyasının switch-case yapısı içinde:
 
     case 'attendance':       safe_load('AttendanceController', 'index'); break;
-    case 'attendance_save':  safe_load('AttendanceController', 'save'); break;
+    case 'attendance_store':  safe_load('AttendanceController', 'store'); break;
     case 'attendance_report': safe_load('AttendanceReportController', 'index'); break;
     case 'student_archive_store': safe_load('StudentController', 'archive_store'); break;
     case 'attendance_report_mail': safe_load('AttendanceReportController', 'sendMail'); break;
-    
+
     // --- ANTRENÖR ---
     case 'coach_list':        safe_load('CoachController', 'index'); break;
     case 'coach_store':       safe_load('CoachController', 'store'); break;

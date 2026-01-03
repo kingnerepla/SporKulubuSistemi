@@ -1,4 +1,8 @@
 <?php
+// Hataları görelim
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
 class GroupController {
     private $db;
 
@@ -10,107 +14,130 @@ class GroupController {
     // --- GRUPLARI LİSTELE ---
     public function index() {
         $clubId = $_SESSION['selected_club_id'] ?? $_SESSION['club_id'];
+        $role = strtolower($_SESSION['role'] ?? '');
+        $userId = $_SESSION['user_id'] ?? 0;
 
-        // Grupları Çek
+        // 1. Grupları Çek
         $sql = "SELECT g.*, u.FullName as CoachName,
                        (SELECT COUNT(*) FROM Students WHERE GroupID = g.GroupID AND IsActive = 1) as StudentCount
                 FROM Groups g
                 LEFT JOIN Users u ON g.CoachID = u.UserID
-                WHERE g.ClubID = ? 
-                ORDER BY g.GroupName ASC";
+                WHERE g.ClubID = ?";
+        
+        $params = [$clubId];
+
+        if ($role == 'coach' || $role == 'trainer') {
+            $sql .= " AND g.CoachID = ?";
+            $params[] = $userId;
+        }
+        $sql .= " ORDER BY g.GroupName ASC";
+
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([$clubId]);
+        $stmt->execute($params);
         $groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Her grubun ders programını çek
+        // 2. Programları Ekle
         foreach ($groups as &$g) {
-            $schedSql = "SELECT * FROM GroupSchedule WHERE GroupID = ? ORDER BY DayOfWeek, StartTime";
-            $stmtSch = $this->db->prepare($schedSql);
+            $stmtSch = $this->db->prepare("SELECT * FROM GroupSchedule WHERE GroupID = ? ORDER BY DayOfWeek, StartTime");
             $stmtSch->execute([$g['GroupID']]);
             $g['Schedule'] = $stmtSch->fetchAll(PDO::FETCH_ASSOC);
         }
 
-        // Antrenörleri Çek
-        // Sadece 3 numaralı rolü (Antrenör) getirir. 
-        $sqlCoaches = "SELECT UserID, FullName FROM Users WHERE ClubID = ? AND RoleID = 3 AND IsActive = 1";
-        $stmtCoaches = $this->db->prepare($sqlCoaches);
-        $stmtCoaches->execute([$clubId]);
-        $coaches = $stmtCoaches->fetchAll(PDO::FETCH_ASSOC);
+        // 3. Antrenörleri Çek (Sadece Yönetici İçin)
+        $coaches = [];
+        if ($role != 'coach' && $role != 'trainer') {
+            $stmtCoaches = $this->db->prepare("SELECT UserID, FullName FROM Users WHERE ClubID = ? AND RoleID = 3 AND IsActive = 1 ORDER BY FullName ASC");
+            $stmtCoaches->execute([$clubId]);
+            $coaches = $stmtCoaches->fetchAll(PDO::FETCH_ASSOC);
+        }
 
         $this->render('groups', ['groups' => $groups, 'coaches' => $coaches]);
     }
 
-    // --- KAYDET / GÜNCELLE ---
-    public function store() {
+    // --- KAYDET / GÜNCELLE (TEK FONKSİYON) ---
+    public function save() {
+        // GÜVENLİK
+        $role = strtolower($_SESSION['role'] ?? '');
+        if ($role == 'coach' || $role == 'trainer') {
+            $_SESSION['error_message'] = "Yetkisiz işlem.";
+            header("Location: index.php?page=groups");
+            exit;
+        }
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $this->db->beginTransaction();
                 $clubId = $_SESSION['selected_club_id'] ?? $_SESSION['club_id'];
                 
-                $groupId = $_POST['group_id'] ?? null;
+                $groupId = $_POST['group_id'] ?? ''; // Boşsa INSERT, Doluysa UPDATE
                 $groupName = trim($_POST['group_name']);
                 $coachId = !empty($_POST['coach_id']) ? $_POST['coach_id'] : null;
 
-                // 1. GRUBU EKLE VEYA GÜNCELLE
-                if (!empty($groupId)) {
-                    // Update
-                    $sql = "UPDATE Groups SET GroupName = ?, CoachID = ? WHERE GroupID = ? AND ClubID = ?";
-                    $this->db->prepare($sql)->execute([$groupName, $coachId, $groupId, $clubId]);
-                    
-                    // Eski programı temizle (Sıfırdan ekleyeceğiz)
-                    $this->db->prepare("DELETE FROM GroupSchedule WHERE GroupID = ?")->execute([$groupId]);
-                } else {
-                    // Insert
-                    $sql = "INSERT INTO Groups (ClubID, GroupName, CoachID, CreatedAt) VALUES (?, ?, ?, GETDATE())";
-                    $this->db->prepare($sql)->execute([$clubId, $groupName, $coachId]);
+                if (empty($groupId)) {
+                    // --- INSERT (YENİ KAYIT) ---
+                    $stmt = $this->db->prepare("INSERT INTO Groups (ClubID, GroupName, CoachID, CreatedAt) VALUES (?, ?, ?, GETDATE())");
+                    $stmt->execute([$clubId, $groupName, $coachId]);
                     $groupId = $this->db->lastInsertId();
+                    $_SESSION['success_message'] = "Grup oluşturuldu.";
+                } else {
+                    // --- UPDATE (GÜNCELLEME) ---
+                    $stmt = $this->db->prepare("UPDATE Groups SET GroupName = ?, CoachID = ? WHERE GroupID = ?");
+                    $stmt->execute([$groupName, $coachId, $groupId]);
+                    
+                    // Programı sil (yenisi eklenecek)
+                    $this->db->prepare("DELETE FROM GroupSchedule WHERE GroupID = ?")->execute([$groupId]);
+                    $_SESSION['success_message'] = "Grup güncellendi.";
                 }
 
-                // 2. DERS PROGRAMINI EKLE (Critical Fix: Foreach kullanımı)
-                if (isset($_POST['days']) && is_array($_POST['days'])) {
-                    $days = $_POST['days'];
-                    $starts = $_POST['starts'];
-                    $ends = $_POST['ends'];
+                // --- PROGRAMI KAYDET ---
+                if (!empty($_POST['days'])) {
+                    $sqlSched = "INSERT INTO GroupSchedule (GroupID, DayOfWeek, StartTime, EndTime) VALUES (?, ?, ?, ?)";
+                    $stmtSched = $this->db->prepare($sqlSched);
 
-                    $insSch = $this->db->prepare("INSERT INTO GroupSchedule (GroupID, DayOfWeek, StartTime, EndTime) VALUES (?, ?, ?, ?)");
-
-                    // Döngüyü indeks ile değil, key ile dönüyoruz (Kayma olmasın diye)
-                    foreach ($days as $key => $dayVal) {
-                        $startVal = $starts[$key] ?? null;
-                        $endVal = $ends[$key] ?? null;
-
-                        if (!empty($dayVal) && !empty($startVal) && !empty($endVal)) {
-                            $insSch->execute([$groupId, $dayVal, $startVal, $endVal]);
+                    foreach ($_POST['days'] as $key => $day) {
+                        $start = $_POST['starts'][$key] ?? null;
+                        $end = $_POST['ends'][$key] ?? null;
+                        if ($day && $start && $end) {
+                            $stmtSched->execute([$groupId, $day, $start, $end]);
                         }
                     }
                 }
 
                 $this->db->commit();
-                $_SESSION['success_message'] = "İşlem başarıyla kaydedildi.";
-                header("Location: index.php?page=groups");
-                exit;
-
             } catch (Exception $e) {
                 if ($this->db->inTransaction()) $this->db->rollBack();
-                die("Kayıt Hatası: " . $e->getMessage());
+                $_SESSION['error_message'] = "Hata: " . $e->getMessage();
             }
+            header("Location: index.php?page=groups");
+            exit;
         }
     }
 
-    // --- SİL ---
+    // --- SİLME ---
     public function delete() {
+        $role = strtolower($_SESSION['role'] ?? '');
+        if ($role == 'coach' || $role == 'trainer') {
+            die("Yetkisiz işlem.");
+        }
+
         $id = $_GET['id'] ?? null;
         if ($id) {
-            // Öğrenci kontrolü
             $check = $this->db->prepare("SELECT COUNT(*) FROM Students WHERE GroupID = ? AND IsActive = 1");
             $check->execute([$id]);
             if ($check->fetchColumn() > 0) {
-                echo "<script>alert('Bu grupta aktif öğrenciler var! Silinemez.'); window.location.href='index.php?page=groups';</script>";
-                exit;
+                $_SESSION['error_message'] = "Bu grupta aktif öğrenciler var! Önce öğrencileri taşıyın.";
+            } else {
+                try {
+                    $this->db->beginTransaction();
+                    $this->db->prepare("DELETE FROM GroupSchedule WHERE GroupID = ?")->execute([$id]);
+                    $this->db->prepare("DELETE FROM Groups WHERE GroupID = ?")->execute([$id]);
+                    $this->db->commit();
+                    $_SESSION['success_message'] = "Grup silindi.";
+                } catch (Exception $e) {
+                    $this->db->rollBack();
+                    $_SESSION['error_message'] = "Silme hatası.";
+                }
             }
-
-            $this->db->prepare("DELETE FROM Groups WHERE GroupID = ?")->execute([$id]);
-            $_SESSION['success_message'] = "Grup silindi.";
         }
         header("Location: index.php?page=groups");
         exit;

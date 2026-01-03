@@ -3,7 +3,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4 px-2">
         <div>
             <h3 class="fw-bold mb-1 text-secondary"><i class="fa-solid fa-box-archive me-2"></i>Arşivlenmiş Öğrenciler</h3>
-            <p class="text-muted small mb-0">Dondurulmuş veya ilişiği kesilmiş öğrenci kayıtları.</p>
+            <p class="text-muted small mb-0">Pasif durumdaki öğrenci kayıtları.</p>
         </div>
         <div>
             <a href="index.php?page=students" class="btn btn-outline-primary btn-sm shadow-sm px-3">
@@ -26,45 +26,37 @@
                     <thead class="bg-light text-uppercase small text-muted">
                         <tr>
                             <th class="ps-4 py-3">Öğrenci Bilgisi</th>
-                            <th>Arşiv Durumu / Sebep</th>
-                            <th class="text-center">Saklı Kalan Hak</th>
+                            <th>Son Durum</th>
+                            <th class="text-center">Kalan Hak</th>
                             <th class="text-end pe-4">İşlem</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach($students as $s): 
-                            // Durum Analizi
                             $rem = (int)$s['RemainingSessions'];
-                            
-                            if ($rem > 0) {
-                                // DONDURULMUŞ (Hakkı Var)
-                                $statusBadge = '<span class="badge bg-warning text-dark"><i class="fa-regular fa-snowflake me-1"></i>DONDURULDU</span>';
-                                $statusText = 'Öğrencinin hakkı saklı tutuluyor.';
-                                $rowClass = 'bg-warning bg-opacity-10'; // Hafif sarı arka plan
-                            } else {
-                                // İLİŞİK KESİLMİŞ (Hakkı Yok)
-                                $statusBadge = '<span class="badge bg-secondary"><i class="fa-solid fa-user-xmark me-1"></i>İLİŞİK KESİLDİ</span>';
-                                $statusText = 'Bakiye sıfırlandı veya iade yapıldı.';
-                                $rowClass = ''; 
-                            }
                         ?>
-                        <tr class="<?= $rowClass ?>">
+                        <tr class="<?= $rem > 0 ? 'bg-warning bg-opacity-10' : '' ?>">
                             <td class="ps-4">
                                 <div class="fw-bold text-dark"><?= htmlspecialchars($s['FullName']) ?></div>
                                 <div class="small text-muted">
                                     <i class="fa-solid fa-layer-group me-1"></i><?= htmlspecialchars($s['GroupName'] ?? 'Grup Yok') ?>
                                 </div>
+                                <?php if(!empty($s['Notes'])): ?>
+                                    <div class="x-small text-danger fst-italic mt-1"><?= htmlspecialchars($s['Notes']) ?></div>
+                                <?php endif; ?>
                             </td>
                             
                             <td>
-                                <div class="mb-1"><?= $statusBadge ?></div>
-                                <div class="x-small text-muted"><?= $statusText ?></div>
+                                <?php if($rem > 0): ?>
+                                    <span class="badge bg-warning text-dark"><i class="fa-regular fa-snowflake me-1"></i>DONDURULDU</span>
+                                <?php else: ?>
+                                    <span class="badge bg-secondary">İLİŞİK KESİLDİ</span>
+                                <?php endif; ?>
                             </td>
 
                             <td class="text-center">
                                 <?php if($rem > 0): ?>
                                     <h5 class="fw-bold text-dark mb-0"><?= $rem ?></h5>
-                                    <span class="x-small text-muted">Ders Hakkı</span>
                                 <?php else: ?>
                                     <span class="text-muted opacity-50">-</span>
                                 <?php endif; ?>
@@ -83,7 +75,7 @@
 
                                 <a href="index.php?page=student_destroy&id=<?= $s['StudentID'] ?>" 
                                    class="btn btn-sm btn-outline-danger shadow-sm px-2"
-                                   onclick="return confirm('DİKKAT: Bu işlem geri alınamaz!\n\nÖğrencinin tüm geçmiş verileri, ödemeleri ve yoklamaları silinecektir. Onaylıyor musunuz?')">
+                                   onclick="return confirm('DİKKAT: Tamamen silinecek. Emin misiniz?')">
                                     <i class="fa-solid fa-trash"></i>
                                 </a>
                             </td>
@@ -96,11 +88,7 @@
     
     <?php else: ?>
         <div class="text-center py-5">
-            <div class="bg-light rounded-circle d-inline-flex p-4 mb-3 text-secondary">
-                <i class="fa-solid fa-box-open fa-3x opacity-50"></i>
-            </div>
             <h5 class="text-muted">Arşiv boş.</h5>
-            <p class="text-muted small">Silinen veya dondurulan öğrenciler burada listelenir.</p>
         </div>
     <?php endif; ?>
 </div>
@@ -112,39 +100,30 @@
                 <input type="hidden" name="student_id" id="restStudentId">
                 
                 <div class="modal-header bg-success text-white">
-                    <h6 class="modal-title fw-bold"><i class="fa-solid fa-user-check me-2"></i>Öğrenciyi Aktif Et</h6>
+                    <h6 class="modal-title fw-bold">Öğrenciyi Aktif Et</h6>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 
                 <div class="modal-body p-4">
                     <div class="text-center mb-4">
                         <h5 class="fw-bold text-dark" id="restName">Öğrenci Adı</h5>
-                        <p class="text-muted small mb-2">Bu öğrenci aktif listeye taşınacaktır.</p>
-                        
-                        <div class="alert alert-light border border-success d-inline-block px-4 py-2 rounded-pill">
-                            <i class="fa-solid fa-wallet me-2 text-success"></i>
-                            Geri Gelecek Hak: <strong id="restRemaining" class="text-dark">0</strong> Ders
-                        </div>
+                        <p class="text-muted small">Bu öğrenci aktif listeye taşınacaktır.</p>
                     </div>
 
                     <div class="mb-3">
                         <label class="small fw-bold mb-1 text-dark">Dahil Olacağı Grup</label>
                         <select name="group_id" id="restGroup" class="form-select border-success" required>
                             <option value="">-- Grup Seçiniz --</option>
-                            <?php 
-                            // Gruplar listesi Controller'dan $groups olarak gelmeli
-                            if(!empty($groups)): foreach($groups as $g): ?>
+                            <?php if(!empty($groups)): foreach($groups as $g): ?>
                                 <option value="<?= $g['GroupID'] ?>"><?= htmlspecialchars($g['GroupName']) ?></option>
                             <?php endforeach; endif; ?>
                         </select>
-                        <div class="form-text x-small">Öğrencinin başlayacağı yeni grubu seçiniz.</div>
                     </div>
-
                 </div>
                 
                 <div class="modal-footer border-0 pt-0">
                     <button type="button" class="btn btn-light" data-bs-dismiss="modal">İptal</button>
-                    <button type="submit" class="btn btn-success px-4 fw-bold">Onayla ve Listeye Al</button>
+                    <button type="submit" class="btn btn-success px-4 fw-bold">Onayla</button>
                 </div>
             </form>
         </div>
@@ -156,25 +135,13 @@
         const restoreModal = document.getElementById('restoreModal');
         restoreModal.addEventListener('show.bs.modal', function(event) {
             const btn = event.relatedTarget;
-            
-            // Verileri aktar
             document.getElementById('restStudentId').value = btn.getAttribute('data-id');
             document.getElementById('restName').textContent = btn.getAttribute('data-name');
-            document.getElementById('restRemaining').textContent = btn.getAttribute('data-remaining');
             
-            // Eski grubunu otomatik seçmeye çalış (Eğer grup hala varsa)
             const oldGroup = btn.getAttribute('data-group');
             const selectBox = document.getElementById('restGroup');
-            if(oldGroup) {
-                selectBox.value = oldGroup; 
-            } else {
-                selectBox.value = ""; // Yoksa boş bırak
-            }
+            if(oldGroup) selectBox.value = oldGroup; 
+            else selectBox.value = "";
         });
     });
 </script>
-
-<style>
-    .x-small { font-size: 0.7rem; }
-    body { background-color: #f4f7f6; }
-</style>
