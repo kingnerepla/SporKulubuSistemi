@@ -1,128 +1,136 @@
 <?php
+// Hataları göster
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
 class AttendanceReportController {
     private $db;
 
     public function __construct() {
+        date_default_timezone_set('Europe/Istanbul');
+        if (file_exists(__DIR__ . '/../Config/Database.php')) require_once __DIR__ . '/../Config/Database.php';
         $this->db = (new Database())->getConnection();
         
-        // --- GÜVENLİK VE YETKİ KONTROLÜ ---
         $role = strtolower($_SESSION['role'] ?? '');
         $userId = $_SESSION['user_id'] ?? 0;
         
-        // 1. Kimler girebilir? (Yönetici, Admin veya Antrenör)
         $allowed = ['clubadmin', 'admin', 'systemadmin', 'superadmin', 'coach', 'trainer'];
-        if (!in_array($role, $allowed)) {
-            die('Erişim yetkiniz yok.');
-        }
+        if (!in_array($role, $allowed)) die('Erişim yetkiniz yok.');
 
-        // 2. Eğer Antrenörse, "Rapor Görme Yetkisi" var mı?
         if ($role == 'coach' || $role == 'trainer') {
-            // Veritabanından yetkisini taze çekelim (Session eski kalmış olabilir)
             $stmt = $this->db->prepare("SELECT CanViewReports FROM Users WHERE UserID = ?");
             $stmt->execute([$userId]);
-            $canView = $stmt->fetchColumn();
-
-            if (!$canView) {
-                die('<div class="alert alert-danger m-5">Raporları görüntüleme yetkiniz bulunmuyor. Lütfen yöneticiyle görüşün.</div>');
+            if (!$stmt->fetchColumn()) {
+                echo '<div class="alert alert-danger m-4 text-center">Yetkisiz Erişim</div>'; exit;
             }
         }
     }
-    public function sendMail() {
-        $clubId = $_SESSION['selected_club_id'] ?? $_SESSION['club_id'];
-        $groupId = $_GET['group_id'] ?? null;
-        $month = $_GET['month'] ?? date('m');
-        $year = $_GET['year'] ?? date('Y');
-        
-        // ÖNEMLİ: Dışarıdan email gelmezse oturum açan kişinin mailini al
-        $toEmail = $_GET['email'] ?? $_SESSION['email']; 
-    
-        if (!$groupId) {
-            header("Location: index.php?page=attendance_report");
-            exit;
-        }
-    
-        // ... (Geri kalan mail hazırlama kodları aynı kalacak) ...
-        // $groupName çekme, $message oluşturma vs.
-        
-        // En sonda yönlendirme yaparken kullanıcıya bilgi verelim
-        if(mail($toEmail, $subject, $message, $headers)) {
-            $_SESSION['success_message'] = "Rapor, kayıtlı adresiniz olan $toEmail adresine gönderildi.";
-        } else {
-            $_SESSION['error_message'] = "Mail gönderilirken bir hata oluştu.";
-        }
-    
-        header("Location: index.php?page=attendance_report&group_id=$groupId&month=$month&year=$year");
-        exit;
-    }
+
     public function index() {
         $clubId = $_SESSION['selected_club_id'] ?? $_SESSION['club_id'];
-        
-        // FİLTRELER
-        $selectedGroupId = $_GET['group_id'] ?? null;
-        $selectedMonth   = $_GET['month'] ?? date('m');
-        $selectedYear    = $_GET['year'] ?? date('Y');
-
-        // 1. GRUPLARI ÇEK (Dropdown için)
-        // Eğer antrenörse SADECE kendi gruplarını görsün
         $role = strtolower($_SESSION['role'] ?? '');
         $userId = $_SESSION['user_id'] ?? 0;
+        $isCoach = ($role == 'coach' || $role == 'trainer');
+        
+        // FİLTRELER
+        $selectedYear = (int)($_GET['year'] ?? date('Y'));
+        $selectedGroupId = $_GET['group_id'] ?? null;
 
-        if ($role == 'coach' || $role == 'trainer') {
-            $grpSql = "SELECT GroupID, GroupName FROM Groups WHERE ClubID = ? AND CoachID = ? ORDER BY GroupName ASC";
-            $stmtGrp = $this->db->prepare($grpSql);
-            $stmtGrp->execute([$clubId, $userId]);
+        // 1. GRUP LİSTESİ (Dropdown İçin)
+        $allGroups = [];
+        if ($isCoach) {
+            $stmtG = $this->db->prepare("SELECT GroupID, GroupName FROM Groups WHERE CoachID = ? AND ClubID = ? ORDER BY GroupName ASC");
+            $stmtG->execute([$userId, $clubId]);
+            $allGroups = $stmtG->fetchAll(PDO::FETCH_ASSOC);
         } else {
-            // Yönetici hepsini görür
-            $grpSql = "SELECT GroupID, GroupName FROM Groups WHERE ClubID = ? ORDER BY GroupName ASC";
-            $stmtGrp = $this->db->prepare($grpSql);
-            $stmtGrp->execute([$clubId]);
-        }
-        $groups = $stmtGrp->fetchAll(PDO::FETCH_ASSOC);
-
-        // Eğer grup seçilmediyse ve gruplar varsa, ilkinin verisini getir
-        if (!$selectedGroupId && !empty($groups)) {
-            $selectedGroupId = $groups[0]['GroupID'];
+            $stmtAll = $this->db->prepare("SELECT GroupID, GroupName FROM Groups WHERE ClubID = ? ORDER BY GroupName ASC");
+            $stmtAll->execute([$clubId]);
+            $allGroups = $stmtAll->fetchAll(PDO::FETCH_ASSOC);
         }
 
-        $students = [];
-        $attendanceData = [];
-        $lessonDays = [];
-
+        // 2. HEDEF GRUPLARI BELİRLE
+        // Eğer seçim yapıldıysa o grubu, yapılmadıysa LİSTEDEKİ TÜM GRUPLARI al.
+        $targetGroups = [];
         if ($selectedGroupId) {
-            // 2. ÖĞRENCİLERİ ÇEK
-            $stuSql = "SELECT StudentID, FullName FROM Students WHERE GroupID = ? AND IsActive = 1 ORDER BY FullName ASC";
-            $stmtStu = $this->db->prepare($stuSql);
-            $stmtStu->execute([$selectedGroupId]);
-            $students = $stmtStu->fetchAll(PDO::FETCH_ASSOC);
-
-            // 3. YOKLAMA VERİLERİNİ ÇEK (Matris için)
-            // Sadece seçilen ay ve yıldaki veriler
-            $attSql = "SELECT StudentID, DAY([Date]) as DayNum, IsPresent 
-                       FROM Attendance 
-                       WHERE GroupID = ? AND MONTH([Date]) = ? AND YEAR([Date]) = ?";
-            $stmtAtt = $this->db->prepare($attSql);
-            $stmtAtt->execute([$selectedGroupId, $selectedMonth, $selectedYear]);
-            $rawAttendance = $stmtAtt->fetchAll(PDO::FETCH_ASSOC);
-
-            // Veriyi kolay kullanım için düzenle: $attendanceData[StudentID][Gün] = Durum
-            foreach($rawAttendance as $row) {
-                $attendanceData[$row['StudentID']][$row['DayNum']] = $row['IsPresent'];
-                
-                // Hangi günlerde ders yapılmış? (Takvimi boyamak için)
-                $lessonDays[$row['DayNum']] = true; 
+            foreach ($allGroups as $g) {
+                if ($g['GroupID'] == $selectedGroupId) {
+                    $targetGroups[] = $g;
+                    break;
+                }
             }
+        } else {
+            $targetGroups = $allGroups;
+        }
+
+        // 3. HER GRUP İÇİN VERİLERİ HAZIRLA
+        $finalReports = [];
+
+        foreach ($targetGroups as $group) {
+            $gId = $group['GroupID'];
+
+            // a. Öğrenciler
+            $stmtS = $this->db->prepare("SELECT StudentID, FullName FROM Students WHERE GroupID = ? AND IsActive = 1 ORDER BY FullName ASC");
+            $stmtS->execute([$gId]);
+            $students = $stmtS->fetchAll(PDO::FETCH_ASSOC);
+
+            if (empty($students)) continue; // Öğrencisi yoksa raporlama
+
+            // b. Döngü Sayısı (Haftalık Ders x 4)
+            $stmtSch = $this->db->prepare("SELECT COUNT(DISTINCT DayOfWeek) FROM GroupSchedule WHERE GroupID = ?");
+            $stmtSch->execute([$gId]);
+            $weeklyFreq = $stmtSch->fetchColumn();
+            if ($weeklyFreq < 1) $weeklyFreq = 1; // En az 1 kabul et
+            
+            $cycleCount = $weeklyFreq * 4; // Paket Boyutu (4, 8, 12 vs.)
+
+            // c. Yıl içindeki Tarihler
+            $stmtDates = $this->db->prepare("SELECT DISTINCT [Date] FROM Attendance WHERE GroupID = ? AND YEAR([Date]) = ? ORDER BY [Date] ASC");
+            $stmtDates->execute([$gId, $selectedYear]);
+            $allDates = $stmtDates->fetchAll(PDO::FETCH_COLUMN);
+
+            // d. Yoklama Verisi
+            $attendanceMatrix = [];
+            if (!empty($allDates)) {
+                $stmtA = $this->db->prepare("SELECT StudentID, [Date], IsPresent FROM Attendance WHERE GroupID = ? AND YEAR([Date]) = ?");
+                $stmtA->execute([$gId, $selectedYear]);
+                $rawAtt = $stmtA->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($rawAtt as $r) {
+                    $attendanceMatrix[$r['StudentID']][$r['Date']] = $r['IsPresent'];
+                }
+            }
+
+            // e. Tarihleri Parçala (Chunks)
+            $dateChunks = array_chunk($allDates, $cycleCount);
+            $reportChunks = [];
+            foreach ($dateChunks as $idx => $chunk) {
+                $reportChunks[] = [
+                    'period_no' => $idx + 1,
+                    'start' => reset($chunk),
+                    'end' => end($chunk),
+                    'dates' => $chunk
+                ];
+            }
+
+            // Bu grubun raporunu ana diziye ekle
+            $finalReports[] = [
+                'group_info' => $group,
+                'students' => $students,
+                'cycle_count' => $cycleCount,
+                'chunks' => $reportChunks,
+                'attendance' => $attendanceMatrix
+            ];
         }
 
         $this->render('attendance_report', [
-            'groups'         => $groups,
-            'students'       => $students,
-            'attendanceData' => $attendanceData,
-            'lessonDays'     => $lessonDays,
+            'isCoach'        => $isCoach,
+            'allGroups'      => $allGroups,
             'selectedGroupId'=> $selectedGroupId,
-            'selectedMonth'  => $selectedMonth,
-            'selectedYear'   => $selectedYear
+            'selectedYear'   => $selectedYear,
+            'finalReports'   => $finalReports
         ]);
     }
+
+    public function sendMail() { $this->index(); }
 
     private function render($view, $data = []) {
         if(isset($_SESSION)) $data = array_merge($_SESSION, $data);

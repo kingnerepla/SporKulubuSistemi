@@ -22,100 +22,91 @@ class AttendanceController {
         }
     }
 
-    // --- LİSTELEME SAYFASI ---
     public function index() {
+        // 1. AYARLAR
+        date_default_timezone_set('Europe/Istanbul');
         $clubId = $_SESSION['selected_club_id'] ?? $_SESSION['club_id'];
         $role = strtolower($_SESSION['role'] ?? '');
         $userId = $_SESSION['user_id'] ?? 0;
         $isAdmin = in_array($role, ['clubadmin', 'admin', 'systemadmin', 'superadmin']);
 
-        // Tarih Belirleme (Saat dilimi ayarlandığı için artık doğru çalışır)
-        if ($isAdmin) {
-            $date = $_GET['date'] ?? date('Y-m-d');
-        } else {
-            $date = date('Y-m-d');
-        }
-
-        // Navigasyon
+        // 2. TARİH BELİRLEME
+        // URL'den tarih geldiyse onu al, yoksa bugünü al
+        $date = isset($_GET['date']) && !empty($_GET['date']) ? $_GET['date'] : date('Y-m-d');
+        
         $prevDate = date('Y-m-d', strtotime($date . ' -1 day'));
         $nextDate = date('Y-m-d', strtotime($date . ' +1 day'));
 
-        // Tarih Başlığı
+        // 3. GÜN HESABI (KRİTİK NOKTA)
         $timestamp = strtotime($date);
-        $days = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
-        $months = ['', 'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
-        $formattedDate = date('d', $timestamp) . ' ' . $months[date('n', $timestamp)] . ' ' . date('Y', $timestamp) . ' ' . $days[date('w', $timestamp)];
+        
+        // PHP'de: 1=Pazartesi, 7=Pazar
         $dayOfWeek = date('N', $timestamp);
 
-        // 1. Grupları Getir
-        $sqlGroups = "SELECT GroupID, GroupName FROM Groups WHERE ClubID = ?";
-        $paramsGroups = [$clubId];
+        // Debug: Sayfanın en üstünde hangi günü aradığımızı yazar (Sorun çözülünce silersin)
+        // echo '<div style="background:red; color:white; padding:10px;">Aranan Gün Numarası: ' . $dayOfWeek . ' (1=Pzt, 7=Paz)</div>';
 
+        // Başlık Formatı
+        $daysTR = [1=>'Pazartesi', 2=>'Salı', 3=>'Çarşamba', 4=>'Perşembe', 5=>'Cuma', 6=>'Cumartesi', 7=>'Pazar'];
+        $monthsTR = ['', 'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+        $formattedDate = date('d', $timestamp) . ' ' . $monthsTR[date('n', $timestamp)] . ' ' . date('Y', $timestamp) . ' ' . ($daysTR[$dayOfWeek] ?? '');
+
+        // 4. GRUPLARI ÇEK (JOIN İLE FİLTRELEME)
+        // Bu sorgu SADECE GroupSchedule tablosunda o gün ($dayOfWeek) kaydı olan grupları getirir.
+        // Dersi olmayan grubun gelme ihtimali yoktur.
+        
+        $sqlGroups = "
+            SELECT DISTINCT g.GroupID, g.GroupName 
+            FROM Groups g
+            INNER JOIN GroupSchedule gs ON g.GroupID = gs.GroupID
+            WHERE g.ClubID = ? AND gs.DayOfWeek = ?
+        ";
+        
+        $paramsGroups = [$clubId, $dayOfWeek];
+
+        // Antrenörse ek filtre
         if (!$isAdmin) {
-            $sqlGroups .= " AND CoachID = ?";
+            $sqlGroups .= " AND g.CoachID = ?";
             $paramsGroups[] = $userId;
         }
-        $sqlGroups .= " ORDER BY GroupName ASC";
+        
+        $sqlGroups .= " ORDER BY g.GroupName ASC";
 
         $stmt = $this->db->prepare($sqlGroups);
         $stmt->execute($paramsGroups);
-        $rawGroups = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $filteredGroups = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $filteredGroups = []; // Filtrelenmiş grupları burada toplayacağız
-
-        // 2. Grupların Detaylarını Doldur ve FİLTRELE
-        foreach ($rawGroups as $g) {
+        // 5. DETAYLARI DOLDUR (Sadece gelen az sayıdaki grup için çalışır)
+        foreach ($filteredGroups as &$g) {
             $gId = $g['GroupID'];
+            $g['is_lesson_day'] = true;
 
-            // Ders Günü mü?
+            // Saatleri Çek (Göstermek için)
             $stmtSch = $this->db->prepare("SELECT StartTime, EndTime FROM GroupSchedule WHERE GroupID = ? AND DayOfWeek = ?");
             $stmtSch->execute([$gId, $dayOfWeek]);
             $schedules = $stmtSch->fetchAll(PDO::FETCH_ASSOC);
 
-            $isLessonDay = !empty($schedules);
-
-            // 🔥 2. FİLTRELEME MANTIĞI 🔥
-            // Eğer Yönetici DEĞİLSE ve Bugün Ders YOKSA -> Bu grubu listeye ekleme, pas geç.
-            if (!$isAdmin && !$isLessonDay) {
-                continue; 
+            $times = [];
+            foreach($schedules as $s) {
+                $times[] = substr($s['StartTime'], 0, 5) . "-" . substr($s['EndTime'], 0, 5);
             }
+            $g['lesson_hours'] = implode(', ', $times);
 
-            // Grup verilerini işle
-            $g['is_lesson_day'] = $isLessonDay;
-            $g['lesson_hours'] = '';
-            
-            if ($isLessonDay) {
-                $times = [];
-                foreach($schedules as $s) {
-                    $times[] = substr($s['StartTime'],0,5) . "-" . substr($s['EndTime'],0,5);
-                }
-                $g['lesson_hours'] = implode(', ', $times);
-            }
-
-            // Yönetici her zaman işlem yapabilsin diye true yapıyoruz (Ama yukarıda continue ile atılmadıysa)
-            if ($isAdmin) $g['is_lesson_day'] = true;
-
-            // Öğrencileri Çek
+            // Öğrenciler
             $stmtStu = $this->db->prepare("SELECT StudentID, FullName, RemainingSessions FROM Students WHERE GroupID = ? AND IsActive = 1 ORDER BY FullName ASC");
             $stmtStu->execute([$gId]);
             $g['students'] = $stmtStu->fetchAll(PDO::FETCH_ASSOC);
 
-            // Mevcut Yoklamayı Çek
+            // Yoklama Durumu
             $stmtAtt = $this->db->prepare("SELECT StudentID, IsPresent FROM Attendance WHERE GroupID = ? AND [Date] = ?");
             $stmtAtt->execute([$gId, $date]);
             $g['attendance'] = $stmtAtt->fetchAll(PDO::FETCH_KEY_PAIR);
             
-            // İstatistik
             $g['present_count'] = 0;
-            foreach($g['attendance'] as $status) {
-                if($status == 1) $g['present_count']++;
-            }
-
-            // Grubu filtrelenmiş listeye ekle
-            $filteredGroups[] = $g;
+            foreach($g['attendance'] as $status) { if($status == 1) $g['present_count']++; }
         }
 
-        // View'a filtrelenmiş listeyi ($filteredGroups) gönderiyoruz
+        // View'a Gönder
         $this->render('attendance', [
             'groups' => $filteredGroups,
             'selectedDate' => $date,

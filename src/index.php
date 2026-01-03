@@ -117,6 +117,7 @@ switch ($page) {
     case 'coach_delete':      safe_load('CoachController', 'delete'); break;      // Pasife Alma
     case 'coach_restore':     safe_load('CoachController', 'restore'); break;     // Geri Yükleme
     case 'coach_hard_delete': safe_load('CoachController', 'hard_delete'); break; // Kalıcı Silme
+    case 'update_coach_permission': safe_load('DashboardController', 'updatePermission'); break;
     
     // --- FİNANS & ÖDEMELER ---
     case 'club_finance':     safe_load('ClubFinanceController', 'index'); break;
