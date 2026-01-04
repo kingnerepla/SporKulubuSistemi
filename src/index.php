@@ -131,6 +131,7 @@ switch ($page) {
 
     // --- SÜPER ADMİN: MERKEZİ SİSTEM FİNANS ---
     case 'system_finance':   safe_load('SystemFinanceController', 'index'); break;
+    
     case 'store_expense':    safe_load('SystemFinanceController', 'storeExpense'); break;
     case 'delete_expense':   safe_load('SystemFinanceController', 'deleteExpense'); break;
 
@@ -186,6 +187,7 @@ switch ($page) {
 
     // --- PROFİL & SİSTEM ---
     case 'profile':          safe_load('ProfileController', 'index'); break;
+    case 'profile_update':   safe_load('ProfileController', 'index'); break;
     case 'logout':           
         if (session_status() === PHP_SESSION_NONE) session_start();
         $_SESSION = array();

@@ -1,49 +1,72 @@
 <?php
+
 class ProfileController {
     private $db;
 
     public function __construct() {
-        $this->db = Database::getInstance()->getConnection();
+        // Hatanın sebebi burasıydı, bağlantı şeklini güncelledik:
+        if (file_exists(__DIR__ . '/../Config/Database.php')) {
+            require_once __DIR__ . '/../Config/Database.php';
+        }
+        $this->db = (new Database())->getConnection();
     }
 
     public function index() {
-        // Oturum tipine göre veri çekme
-        if (isset($_SESSION['parent_logged_in'])) {
-            $id = $_SESSION['student_id'];
-            $stmt = $this->db->prepare("SELECT FullName as Name, ParentPhone as Identity, [Password] FROM Students WHERE StudentID = ?");
-            $type = 'parent';
-        } else {
-            $id = $_SESSION['user_id'];
-            $stmt = $this->db->prepare("SELECT FullName as Name, Username as Identity, [Password] FROM Users WHERE UserID = ?");
-            $type = 'admin';
+        $userId = $_SESSION['user_id'] ?? null;
+        if (!$userId) {
+            header("Location: index.php?page=login");
+            exit;
         }
 
-        $stmt->execute([$id]);
+        // Kullanıcı bilgilerini çek
+        $stmt = $this->db->prepare("SELECT * FROM Users WHERE UserID = ?");
+        $stmt->execute([$userId]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        include __DIR__ . '/../Views/profile/index.php';
+        $this->render('profile', ['user' => $user]);
     }
 
     public function update() {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $newName = $_POST['full_name'];
-            $newPass = $_POST['password'];
-            
-            if (isset($_SESSION['parent_logged_in'])) {
-                $stmt = $this->db->prepare("UPDATE Students SET FullName = ?, [Password] = ? WHERE StudentID = ?");
-                $id = $_SESSION['student_id'];
-            } else {
-                $stmt = $this->db->prepare("UPDATE Users SET FullName = ?, [Password] = ? WHERE UserID = ?");
-                $id = $_SESSION['user_id'];
+            $userId   = $_SESSION['user_id'];
+            $fullName = $_POST['full_name'];
+            $email    = $_POST['email'];
+            $phone    = $_POST['phone'] ?? ''; // Formdaki 'phone' verisi
+            $password = $_POST['password'] ?? '';
+    
+            try {
+                if (!empty($password)) {
+                    // Şifre güncelleniyorsa: Sütun adı PasswordHash
+                    $sql = "UPDATE Users SET FullName = ?, Email = ?, Phone = ?, PasswordHash = ? WHERE UserID = ?";
+                    $params = [$fullName, $email, $phone, $password, $userId];
+                } else {
+                    // Şifre boşsa sadece diğer bilgiler
+                    $sql = "UPDATE Users SET FullName = ?, Email = ?, Phone = ? WHERE UserID = ?";
+                    $params = [$fullName, $email, $phone, $userId];
+                }
+    
+                $stmt = $this->db->prepare($sql);
+                $stmt->execute($params);
+    
+                $_SESSION['full_name'] = $fullName;
+                header("Location: index.php?page=profile&success=1");
+                exit;
+            } catch (Exception $e) {
+                die("Güncelleme Hatası: " . $e->getMessage());
             }
-
-            if ($stmt->execute([$newName, $newPass, $id])) {
-                $_SESSION['user_name'] = $newName; // Session ismini güncelle
-                header("Location: index.php?page=profile&status=success");
-            } else {
-                header("Location: index.php?page=profile&status=error");
-            }
-            exit;
         }
+    }
+
+    private function render($view, $data = []) {
+        extract($data);
+        ob_start();
+        $path = __DIR__ . "/../Views/admin/{$view}.php";
+        if (file_exists($path)) {
+            include $path;
+        } else {
+            echo "Görünüm bulunamadı: $path";
+        }
+        $content = ob_get_clean();
+        include __DIR__ . '/../Views/layouts/admin_layout.php';
     }
 }
