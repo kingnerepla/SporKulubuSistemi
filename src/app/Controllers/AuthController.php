@@ -9,7 +9,7 @@ class AuthController {
     }
 
     /**
-     * YÖNETİCİ VE ANTRENÖR GİRİŞİ (E-posta/Telefon + Şifre)
+     * YÖNETİCİ VE ANTRENÖR GİRİŞİ
      */
     public function login() {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -17,6 +17,8 @@ class AuthController {
             $password = trim($_POST['password'] ?? '');
     
             try {
+                // 🔥 DEĞİŞİKLİK: Kişinin şahsi hesabı aktif olmalı. 
+                // Kulüp pasif olsa bile (IsActive=0) kullanıcıyı içeri alıyoruz ki borcunu görsün.
                 $sql = "SELECT * FROM Users WHERE (Email = ? OR Phone = ?) AND IsActive = 1";
                 $stmt = $this->db->prepare($sql);
                 $stmt->execute([$loginValue, $loginValue]);
@@ -26,6 +28,7 @@ class AuthController {
                     $dbPass = isset($user['Password']) ? trim($user['Password']) : (isset($user['PasswordHash']) ? trim($user['PasswordHash']) : null);
     
                     if ($dbPass && ($password === $dbPass || password_verify($password, $dbPass))) {
+                        // Giriş başarılı, oturumu oluştur
                         $this->createSession($user);
                         header("Location: index.php?page=dashboard");
                         exit;
@@ -42,33 +45,26 @@ class AuthController {
     }
 
     /**
-     * VELİ GİRİŞİ (Telefon + Şifre)
+     * VELİ GİRİŞİ
      */
     public function parentLogin() {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            // Telefon numarasındaki boşlukları ve karakterleri temizle (Örn: 555 111 22 33 -> 5551112233)
             $phone = preg_replace('/[^0-9]/', '', $_POST['phone'] ?? '');
             $password = trim($_POST['password'] ?? '');
 
             try {
-                // 1. Önce telefon numarasıyla kullanıcıyı bul (RoleID 4 = Veli)
+                // Veliler için de aynı mantık: Kişi aktifse içeri al
                 $sql = "SELECT * FROM Users WHERE (Phone = ? OR Phone = ?) AND IsActive = 1 AND RoleID = 4";
-                // Hem temizlenmiş hem orijinal halini kontrol edelim
                 $stmt = $this->db->prepare($sql);
                 $stmt->execute([$phone, trim($_POST['phone'])]);
                 $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
                 if ($user) {
-                    // Veritabanındaki şifre alanı 'Password' veya 'PasswordHash' olabilir
                     $dbPass = trim($user['Password'] ?? $user['PasswordHash'] ?? '');
 
-                    // 2. Şifre Eşleştirme (Düz metin veya Hash kontrolü)
                     if ($password === $dbPass || password_verify($password, $dbPass)) {
                         $this->createSession($user);
-                        
-                        // ÖNEMLİ: index.php'deki 'parent_logged_in' kontrolü için
                         $_SESSION['parent_logged_in'] = true; 
-                        
                         header("Location: index.php?page=dashboard");
                         exit;
                     }
@@ -77,14 +73,13 @@ class AuthController {
                 error_log("Veli Giriş Hatası: " . $e->getMessage());
             }
 
-            // Başarısız giriş
             header("Location: index.php?page=parent_login&error=invalid");
             exit;
         }
     }
 
     /**
-     * Ortak Oturum Başlatma Fonksiyonu
+     * Ortak Oturum Başlatma
      */
     private function createSession($user) {
         if (session_status() === PHP_SESSION_NONE) session_start();
@@ -129,26 +124,10 @@ class AuthController {
         }
     }
 
-    /**
-     * Görünüm Yükleyiciler
-     */
-    public function showSelection() {
-        include dirname(__DIR__) . '/Views/auth/select.php';
-    }
-    
-    public function showAdminLogin() {
-        include dirname(__DIR__) . '/Views/auth/login.php';
-    }
-
-    public function showParentLogin() {
-        // Mor temalı veli giriş sayfası
-        $path = dirname(__DIR__) . '/Views/parent/login.php';
-        if (file_exists($path)) {
-            include $path;
-        } else {
-            die("Veli giriş dosyası bulunamadı: $path");
-        }
-    }
+    // Görünüm Yükleyiciler ve Logout (Aynı kalıyor)
+    public function showSelection() { include dirname(__DIR__) . '/Views/auth/select.php'; }
+    public function showAdminLogin() { include dirname(__DIR__) . '/Views/auth/login.php'; }
+    public function showParentLogin() { include dirname(__DIR__) . '/Views/parent/login.php'; }
 
     public function logout() {
         if (session_status() === PHP_SESSION_NONE) session_start();

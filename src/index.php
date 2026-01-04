@@ -3,6 +3,7 @@ ob_start();
 header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
 header("Cache-Control: post-check=0, pre-check=0", false);
 header("Pragma: no-cache");
+
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -18,12 +19,16 @@ if (is_dir(__DIR__ . '/src/app')) {
 
 require_once $basePath . '/app/config/Database.php';
 
+// Veritabanı bağlantısını başlat
+$database = new Database();
+$db = $database->getConnection();
+
 $page = $_GET['page'] ?? 'login';
 
-// 2. Herkese açık sayfalar (Giriş yapmadan erişilebilenler)
+// 2. Herkese açık sayfalar
 $public_pages = ['login', 'admin_login_form', 'parent_login', 'admin_auth', 'parent_auth'];
 
-// 3. Yetki Kontrolü (KESİN ÇÖZÜM)
+// 3. Yetki ve Kulüp Durum Kontrolü (GÜVENLİK KİLİDİ)
 if (!in_array($page, $public_pages)) {
     
     // 1. Kural: Giriş yapmamış kimse geçemez
@@ -32,8 +37,34 @@ if (!in_array($page, $public_pages)) {
         exit;
     }
 
-    // 2. Kural: Veli sayfalarına erişim kontrolü
-    // Sayfa "parent_" ile başlıyorsa SADECE veli girebilir
+    // 🔥 2. Kural: YUMUŞAK BORÇ KİLİDİ (Middleware)
+    $s_roleId = (string)($_SESSION['role_id'] ?? $_SESSION['RoleID'] ?? '0');
+    $s_clubId = $_SESSION['club_id'] ?? null;
+    $isImpersonating = isset($_SESSION['impersonator_id']); // Süper Admin sızmış mı?
+
+    // Süper Admin değilse ve bir kulübe bağlıysa kontrol et
+    if ($s_roleId !== "1" && $s_clubId && !$isImpersonating) {
+        $stmtClub = $db->prepare("SELECT IsActive, LicenseEndDate FROM Clubs WHERE ClubID = ?");
+        $stmtClub->execute([$s_clubId]);
+        $clubData = $stmtClub->fetch(PDO::FETCH_ASSOC);
+
+        $today = date('Y-m-d');
+        $isExpired = ($clubData['LicenseEndDate'] && $clubData['LicenseEndDate'] < $today);
+
+        // Eğer kulüp dondurulmuşsa VEYA lisans süresi bitmişse
+        if ($clubData['IsActive'] == 0 || $isExpired) {
+            // İzin verilen sayfalar listesi
+            $allowedPages = ['dashboard', 'profile', 'logout'];
+            
+            if (!in_array($page, $allowedPages)) {
+                // Kısıtlı sayfaya girmeye çalışırsa Dashboard'a yönlendir ve uyar
+                header("Location: index.php?page=dashboard&error=debt_lock");
+                exit;
+            }
+        }
+    }
+
+    // 3. Kural: Veli sayfalarına erişim kontrolü
     if (strpos($page, 'parent_') === 0) {
         if (($_SESSION['role'] ?? '') !== 'parent') {
             header("Location: index.php?page=login");
@@ -41,16 +72,8 @@ if (!in_array($page, $public_pages)) {
         }
     } 
 
-    // 3. Kural: Admin/Personel sayfalarına Velinin girmesini engelle
-    // Eğer kullanıcı veli ise ve girmeye çalıştığı sayfa "parent_" ile BAŞLAMIYORSA (dashboard hariç)
-    if (($_SESSION['role'] ?? '') === 'parent' && strpos($page, 'parent_') !== 0 && $page !== 'dashboard' && $page !== 'profile' && $page !== 'logout') {
-        header("Location: index.php?page=parent_dashboard");
-        exit;
-    }
-    
-    // 4. Kural: Admin sayfalarına erişim kısıtlaması (Veli için yasaklılar)
-    $admin_only_pages = ['clubs', 'system_finance', 'coach_list', 'expenses', 'club_finance', 'payments', 'attendance', 'groups', 'students'];
-    if (in_array($page, $admin_only_pages) && ($_SESSION['role'] ?? '') === 'parent') {
+    // 4. Kural: Admin/Veli Rol Ayrıştırması
+    if (($_SESSION['role'] ?? '') === 'parent' && strpos($page, 'parent_') !== 0 && !in_array($page, ['dashboard', 'profile', 'logout'])) {
         header("Location: index.php?page=parent_dashboard");
         exit;
     }
@@ -76,37 +99,35 @@ function safe_load($controllerName, $methodName) {
             die("<b>Sınıf Hatası:</b> {$controllerName} sınıfı bulunamadı.");
         }
     } else {
-        die("<b>Dosya Hatası:</b> {$controllerName}.php bulunamadı.<br>Yol: <code>$path</code>");
+        die("<b>Dosya Hatası:</b> {$controllerName}.php bulunamadı.");
     }
 }
 
 // 5. ROTA YÖNETİMİ
 switch ($page) {
 
-    // --- AUTH & SELECTION ---
+    // --- AUTH ---
     case 'login':            safe_load('AuthController', 'showSelection'); break;
     case 'admin_login_form': safe_load('AuthController', 'showAdminLogin'); break;
     case 'parent_login':     safe_load('AuthController', 'showParentLogin'); break; 
     case 'parent_auth':      safe_load('AuthController', 'parentLogin'); break;     
     case 'admin_auth':       safe_load('AuthController', 'login');  break;
     
-    // --- DASHBOARD (Ortak veya Ayrı) ---
-    case 'dashboard':        
-        // Veli ise otomatik veli dashboard'una yönlendir
-        if (($_SESSION['role'] ?? '') === 'parent') {
-            safe_load('DashboardController', 'index'); 
-        } else {
-            safe_load('DashboardController', 'index');
-        }
-        break;
+    // --- DASHBOARD ---
+    case 'dashboard':        safe_load('DashboardController', 'index'); break;
 
     // --- SÜPER ADMİN: KULÜP VE SAAS YÖNETİMİ ---
-    case 'clubs':            safe_load('ClubController', 'index'); break; 
-    case 'select_club':      safe_load('ClubController', 'selectClub'); break;
-    case 'clear_selection':  safe_load('ClubController', 'clearSelection'); break;
-    case 'club_store':       safe_load('ClubController', 'store'); break;
-    case 'update_agreement': safe_load('ClubController', 'updateAgreement'); break;
-    case 'packages':         safe_load('ClubController', 'packages'); break; 
+    case 'clubs':               safe_load('ClubController', 'index'); break; 
+    case 'club_add':            safe_load('ClubController', 'create'); break;
+    case 'club_store':          safe_load('ClubController', 'store'); break;
+    case 'club_edit':           safe_load('ClubController', 'edit'); break;
+    case 'club_update':         safe_load('ClubController', 'update'); break;
+    case 'club_status_toggle':  safe_load('DashboardController', 'toggleClubStatus'); break;
+    case 'select_club':         safe_load('ClubController', 'selectClub'); break;
+    case 'clear_selection':     safe_load('ClubController', 'clearSelection'); break;
+    case 'club_impersonate':    safe_load('ClubController', 'impersonate'); break;
+    case 'exit_impersonate':    safe_load('ClubController', 'exitImpersonate'); break;
+    case 'add_saas_payment':    safe_load('ClubController', 'addSaasPayment'); break;
 
     // --- SÜPER ADMİN: MERKEZİ SİSTEM FİNANS ---
     case 'system_finance':   safe_load('SystemFinanceController', 'index'); break;
@@ -154,7 +175,6 @@ switch ($page) {
     case 'payment_delete':   safe_load('PaymentController', 'delete'); break;
 
     // --- VELİ ÖZEL SAYFALARI ---
-    // Eğer ParentController yoksa DashboardController'a da bağlanabilir
     case 'parent_dashboard':  safe_load('DashboardController', 'index'); break; 
     case 'parent_attendance': safe_load('ParentController', 'attendance'); break;
     case 'parent_payments':   safe_load('ParentController', 'payments'); break;
@@ -168,20 +188,17 @@ switch ($page) {
     case 'profile':          safe_load('ProfileController', 'index'); break;
     case 'logout':           
         if (session_status() === PHP_SESSION_NONE) session_start();
-        $_SESSION = array(); // Tüm session değişkenlerini temizle
+        $_SESSION = array();
         if (isset($_COOKIE[session_name()])) {
-            setcookie(session_name(), '', time()-42000, '/'); // Session çerezini sil
+            setcookie(session_name(), '', time()-42000, '/');
         }
         session_destroy(); 
         header("Location: index.php?page=login"); 
         exit;               
-        // Eğer giriş yapmışsa dashboard'a, yapmamışsa login'e
-        if (isset($_SESSION['user_id'])) {
-            header("Location: index.php?page=dashboard");
-        } else {
-            header("Location: index.php?page=login");
-        }
         break;
+
+    default:
+        die("Sayfa bulunamadı.");
 }
 
 if (ob_get_level() > 0) ob_end_flush();

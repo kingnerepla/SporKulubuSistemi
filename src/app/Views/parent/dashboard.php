@@ -29,6 +29,9 @@
                             data-bs-target="#pills-<?= $stu['StudentID'] ?>" 
                             type="button" role="tab">
                         <i class="fa-solid fa-user-graduate me-2"></i><?= htmlspecialchars($stu['FullName']) ?>
+                        <?php if($stu['RemainingSessions'] <= 2): ?>
+                            <span class="badge bg-danger ms-1" style="font-size: 0.6rem;">!</span>
+                        <?php endif; ?>
                     </button>
                 </li>
             <?php endforeach; ?>
@@ -38,6 +41,16 @@
             <?php foreach($students as $index => $stu): ?>
                 <div class="tab-pane fade <?= $index === 0 ? 'show active' : '' ?>" id="pills-<?= $stu['StudentID'] ?>" role="tabpanel">
                     
+                    <?php if($stu['RemainingSessions'] <= 2): ?>
+                        <div class="alert alert-danger border-0 shadow-sm rounded-4 mb-4 d-flex align-items-center">
+                            <i class="fa-solid fa-circle-exclamation fa-2x me-3"></i>
+                            <div>
+                                <h6 class="fw-bold mb-0">Ders Hakkı Azaldı!</h6>
+                                <p class="small mb-0">Öğrencimizin sadece <strong><?= $stu['RemainingSessions'] ?></strong> ders hakkı kalmıştır. Antrenmanlara kesintisiz devam edebilmesi için yeni paket almanız önerilir.</p>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+
                     <div class="row g-4">
                         
                         <div class="col-lg-4">
@@ -50,16 +63,34 @@
                                     <small class="opacity-75"><?= htmlspecialchars($stu['GroupName']) ?></small>
                                 </div>
                                 <div class="card-body">
-                                    <div class="row text-center">
+                                    <div class="row text-center mb-3">
                                         <div class="col-6 border-end">
                                             <small class="text-muted d-block text-uppercase x-small fw-bold">Kalan Hak</small>
-                                            <span class="fs-4 fw-bold text-dark"><?= $stu['RemainingSessions'] ?></span>
+                                            <span class="fs-4 fw-bold <?= $stu['RemainingSessions'] <= 2 ? 'text-danger' : 'text-dark' ?>">
+                                                <?= $stu['RemainingSessions'] ?>
+                                            </span>
                                         </div>
                                         <div class="col-6">
-                                            <small class="text-muted d-block text-uppercase x-small fw-bold">Devamlılık (30 Gün)</small>
+                                            <small class="text-muted d-block text-uppercase x-small fw-bold">Devamlılık</small>
                                             <span class="fs-4 fw-bold text-success">%<?= $stu['attendance_rate'] ?? 0 ?></span>
                                         </div>
                                     </div>
+
+                                    <?php 
+                                        $total = ($stu['StandardSessions'] > 0) ? $stu['StandardSessions'] : 8;
+                                        $percent = ($stu['RemainingSessions'] / $total) * 100;
+                                        $barColor = $percent <= 25 ? 'bg-danger' : 'bg-success';
+                                    ?>
+                                    <div class="px-2 mb-3">
+                                        <div class="d-flex justify-content-between x-small fw-bold mb-1">
+                                            <span class="text-muted">DOLULUK ORANI</span>
+                                            <span class="<?= $stu['RemainingSessions'] <= 2 ? 'text-danger' : 'text-success' ?>">%<?= round($percent) ?></span>
+                                        </div>
+                                        <div class="progress" style="height: 8px;">
+                                            <div class="progress-bar <?= $barColor ?> progress-bar-striped progress-bar-animated" role="progressbar" style="width: <?= $percent ?>%"></div>
+                                        </div>
+                                    </div>
+
                                     <hr class="my-3 opacity-10">
                                     <div class="d-flex justify-content-between px-2">
                                         <small class="text-muted">Antrenör:</small>
@@ -74,8 +105,8 @@
                                 </div>
                                 <div class="card-body pt-0">
                                     <div class="alert alert-light border d-flex justify-content-between align-items-center mb-3">
-                                        <span class="text-muted small">Aylık Paket Ücreti</span>
-                                        <span class="fw-bold">₺<?= number_format($stu['PackageFee'], 2) ?></span>
+                                        <span class="text-muted small">Paket Ücreti</span>
+                                        <span class="fw-bold">₺<?= number_format($stu['PackageFee'], 0, ',', '.') ?></span>
                                     </div>
                                     
                                     <h6 class="small fw-bold text-muted mb-2 ps-1">Son Ödemeler</h6>
@@ -84,7 +115,7 @@
                                             <?php foreach($stu['payment_log'] as $pay): ?>
                                                 <li class="list-group-item px-0 d-flex justify-content-between align-items-center bg-transparent border-light">
                                                     <span class="text-muted"><i class="fa-regular fa-calendar me-1"></i><?= date('d.m.Y', strtotime($pay['PaymentDate'])) ?></span>
-                                                    <span class="text-success fw-bold">+ ₺<?= number_format($pay['Amount'], 0) ?></span>
+                                                    <span class="text-success fw-bold">+ ₺<?= number_format($pay['Amount'], 0, ',', '.') ?></span>
                                                 </li>
                                             <?php endforeach; ?>
                                         </ul>
@@ -105,8 +136,8 @@
                                         <div class="list-group list-group-flush">
                                             <?php foreach($stu['attendance_log'] as $att): 
                                                 $dateTS = strtotime($att['Date']);
-                                                $trDays = ['Pt','Sa','Ça','Pe','Cu','Ct','Pz'];
-                                                $dayIndex = date('N', $dateTS); // 1-7
+                                                $trDays = ['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar'];
+                                                $dayIndex = date('N', $dateTS);
                                                 $dayName = $trDays[$dayIndex - 1];
                                                 
                                                 $isPresent = ($att['IsPresent'] == 1);
@@ -119,7 +150,7 @@
                                                                 <small class="text-uppercase fw-bold" style="font-size: 0.65rem;"><?= date('M', $dateTS) ?></small>
                                                             </div>
                                                             <div>
-                                                                <span class="fw-bold d-block text-dark"><?= $dayName ?> Antrenmanı</span>
+                                                                <span class="fw-bold d-block text-dark"><?= $dayName ?></span>
                                                                 <small class="text-muted"><?= date('d.m.Y', $dateTS) ?></small>
                                                             </div>
                                                         </div>
@@ -143,17 +174,10 @@
                             </div>
                         </div>
 
-                    </div> </div>
+                    </div>
+                </div>
             <?php endforeach; ?>
         </div>
     <?php endif; ?>
 
 </div>
-
-<style>
-    .x-small { font-size: 0.7rem; }
-    .nav-pills .nav-link.active { background-color: #0d6efd; color: white; }
-    .nav-pills .nav-link { border: 1px solid #dee2e6; color: #555; background-color: #f8f9fa; }
-    /* Mobilde kartların alt alta güzel görünmesi için */
-    .card { transition: transform 0.2s; }
-</style>

@@ -11,6 +11,32 @@
         </div>
     </div>
 
+    <?php 
+    $missingCount = 0;
+    foreach($todayTrainings as $t) {
+        if(!(isset($t['AttendanceCount']) && $t['AttendanceCount'] > 0)) {
+            $missingCount++;
+        }
+    }
+    ?>
+
+    <?php if ($missingCount > 0): ?>
+    <div class="alert alert-warning border-0 shadow-sm rounded-4 mb-4 d-flex align-items-center animate-pulse">
+        <div class="bg-warning bg-opacity-20 p-3 rounded-circle me-3">
+            <i class="fa-solid fa-bell-concierge fa-xl text-warning"></i>
+        </div>
+        <div class="flex-grow-1">
+            <h6 class="fw-bold mb-0 text-dark">Yoklama Hatırlatıcı</h6>
+            <p class="small mb-0 text-dark opacity-75">Bugün henüz yoklaması alınmamış <strong><?= $missingCount ?></strong> antrenmanınız bulunuyor. Lütfen gecikmeden giriş yapınız.</p>
+        </div>
+        <div class="ms-3">
+            <a href="index.php?page=attendance" class="btn btn-dark btn-sm rounded-pill px-4 fw-bold shadow-sm">
+                Yoklamaya Git
+            </a>
+        </div>
+    </div>
+    <?php endif; ?>
+
     <div class="row g-4">
         <div class="col-lg-8">
             <div class="row g-3 mb-4">
@@ -58,10 +84,10 @@
                                 $start = substr($t['StartTime'], 0, 5);
                                 $end = substr($t['EndTime'], 0, 5);
                             ?>
-                            <div class="list-group-item px-4 py-3 border-light">
+                            <div class="list-group-item px-4 py-3 border-light <?= !$isDone ? 'bg-warning bg-opacity-10' : '' ?>">
                                 <div class="d-flex align-items-center justify-content-between">
                                     <div class="d-flex align-items-center">
-                                        <div class="text-center me-3 px-2 py-1 rounded bg-light border border-secondary border-opacity-25" style="min-width: 60px;">
+                                        <div class="text-center me-3 px-2 py-1 rounded <?= $isDone ? 'bg-light' : 'bg-white shadow-sm' ?> border border-secondary border-opacity-25" style="min-width: 60px;">
                                             <div class="fw-bold text-dark small"><?= $start ?></div>
                                             <div class="x-small text-muted"><?= $end ?></div>
                                         </div>
@@ -73,8 +99,8 @@
                                                     <i class="fa-solid fa-check me-1"></i>Yoklama Alındı
                                                 </span>
                                             <?php else: ?>
-                                                <span class="badge bg-warning bg-opacity-10 text-warning rounded-pill x-small border border-warning border-opacity-25">
-                                                    <i class="fa-regular fa-clock me-1"></i>Bekliyor
+                                                <span class="badge bg-danger bg-opacity-10 text-danger rounded-pill x-small border border-danger border-opacity-25 animate-flash">
+                                                    <i class="fa-solid fa-triangle-exclamation me-1"></i>Bekliyor
                                                 </span>
                                             <?php endif; ?>
                                         </div>
@@ -114,11 +140,11 @@
                     <h5 class="fw-bold mb-4"><i class="fa-solid fa-bolt me-2 text-warning"></i>Hızlı İşlemler</h5>
                     
                     <div class="d-grid gap-3">
-                        <a href="index.php?page=students" class="btn btn-outline-light text-start border-secondary">
+                        <a href="index.php?page=students" class="btn btn-outline-light text-start border-secondary py-2">
                             <i class="fa-solid fa-users me-2"></i> Sporcu Listesi
                         </a>
                         
-                        <a href="index.php?page=attendance" class="btn btn-info text-dark fw-bold text-start border-0">
+                        <a href="index.php?page=attendance" class="btn btn-info text-dark fw-bold text-start border-0 py-2">
                             <i class="fa-solid fa-calendar-days me-2"></i> Yoklama Geçmişi
                         </a>
                     </div>
@@ -144,4 +170,24 @@
     .x-small { font-size: 0.7rem; }
     .btn-primary { background-color: #0d6efd; border-color: #0d6efd; }
     .btn-primary:hover { background-color: #0b5ed7; border-color: #0a58ca; }
+    
+    /* Hareketli Pulse Efekti */
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.02); }
+        100% { transform: scale(1); }
+    }
+    .animate-pulse {
+        animation: pulse 2s infinite;
+    }
+
+    /* Flash Efekti */
+    @keyframes flash {
+        0% { opacity: 1; }
+        50% { opacity: 0.5; }
+        100% { opacity: 1; }
+    }
+    .animate-flash {
+        animation: flash 1.5s infinite;
+    }
 </style>
